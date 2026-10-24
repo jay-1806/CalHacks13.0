@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { TutorOrchestrator } from '../orchestrator/tutor-orchestrator.js';
 import { InMemoryService } from '../memory/in-memory.js';
 import { NoopObservabilityService } from '../observability/observability-service.js';
-import { MATH_LESSON_PROMPT } from '../prompts/tutor-system-prompt.js';
+import { buildSubjectPrompt, MATH_PACK } from '../prompts/subject-packs.js';
 import { FakeTutorProvider } from './fake-provider.js';
 import { TutorInput } from '@screentutor/shared';
 
@@ -24,12 +24,20 @@ describe('TutorOrchestrator', () => {
 
   // ── 1. MATH EXPLANATION ───────────────────────────────────────────────────
   describe('Math explanation', () => {
-    it('defaults to the explain mode and sends the math lesson prompt', async () => {
+    it('defaults to the explain mode and lets the tutor pick the subject', async () => {
       const response = await ask();
       expect(response.mode).toBe('explain');
       expect(ai.calls[0].mode).toBe('explain');
-      expect(ai.prompts[0]).toBe(MATH_LESSON_PROMPT);
+      // No subject in the request: every pack is offered and Claude chooses.
+      expect(ai.prompts[0]).toBe(buildSubjectPrompt());
+      expect(ai.prompts[0]).toContain(MATH_PACK);
       expect(response.spokenText).toContain('Multiply the outside factor');
+    });
+
+    it('sends only the requested subject pack', async () => {
+      await ask({ subject: 'math' });
+      expect(ai.prompts[0]).toBe(buildSubjectPrompt('math'));
+      expect(ai.prompts[0]).not.toContain('## Chess');
     });
 
     it('records quality checks for drawings and step alignment', async () => {

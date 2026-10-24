@@ -1,6 +1,7 @@
 import { parsePointTag, parseFirstPointTag } from './point-parser.js';
 import { parseStreamTags } from './stream-tag-parser.js';
 import { refineOverlayAnnotationTags } from './overlay-refine.js';
+import { resolveBoardTags } from './chess-board.js';
 import type { PointTarget } from './schemas/tutor.js';
 
 export interface PreparedOverlayText {
@@ -29,6 +30,8 @@ export function prepareOverlayText(
     overlayText = '[POINT:none]';
   }
 
+  // Chess: squares named against the [BOARD] become coordinates before anything else reads them.
+  overlayText = resolveBoardTags(overlayText);
   overlayText = refineOverlayAnnotationTags(overlayText);
 
   const hasPointTag = /\[POINT:[^\]]+\]/i.test(overlayText);

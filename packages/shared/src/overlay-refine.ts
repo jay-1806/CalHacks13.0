@@ -129,8 +129,8 @@ export function dedupeRedundantTagLabels(text: string): string {
           result += match[0];
           pointLabelInStep = undefined;
           drawIndex = 0;
-        } else if (/^\s*work:/i.test(content)) {
-          // Working lines intentionally repeat the sentence's math: keep them verbatim.
+        } else if (/^\s*(work|key|gloss):/i.test(content)) {
+          // Working lines, shortcuts and glosses intentionally repeat the sentence: keep them verbatim.
           result += match[0];
           drawIndex++;
         } else {
@@ -155,7 +155,8 @@ export function stripDuplicateShapeLabel(
   shape: CanvasDrawShape,
   pointerLabel: string | undefined
 ): CanvasDrawShape {
-  if (!shape.label || !pointerLabel || shape.kind === 'work') return shape;
+  // Working lines, shortcuts and glosses carry their own content, not a name for the target.
+  if (!shape.label || !pointerLabel || ['work', 'key', 'gloss'].includes(shape.kind)) return shape;
   if (!labelsEquivalent(shape.label, pointerLabel)) return shape;
   return { ...shape, label: undefined };
 }
@@ -331,6 +332,20 @@ export function refineOverlayAnnotationTags(text: string): string {
         const work = sanitizeDrawShape({ kind: 'work', coords: nums.slice(0, 2), label });
         if (work) parts.push(formatDrawTag(work));
         shape = null;
+      } else if ((kindDraw === 'key' || kindDraw === 'gloss') && nums.length >= 2 && label) {
+        // Placed exactly where the tutor asked (a shortcut beside a control, a word's meaning under it).
+        const placed = sanitizeDrawShape({ kind: kindDraw, coords: nums.slice(0, 2), label });
+        if (placed) {
+          drawCount++;
+          parts.push(formatDrawTag(placed));
+        }
+      } else if ((kindDraw === 'square' || kindDraw === 'move') && nums.length >= 4) {
+        // Board squares come from exact board geometry: snapping would only move them off it.
+        const placed = sanitizeDrawShape({ kind: kindDraw, coords: nums.slice(0, 4), label: label || undefined });
+        if (placed) {
+          drawCount++;
+          parts.push(formatDrawTag(placed));
+        }
       }
 
       if (shape) {
@@ -367,7 +382,11 @@ function formatDrawTag(shape: CanvasDrawShape): string {
     case 'rightangle':
       return `[DRAW:rightangle:${shape.coords.join(',')}]`;
     case 'work':
-      return `[DRAW:work:${shape.coords.join(',')}${label}]`;
+    case 'key':
+    case 'gloss':
+    case 'square':
+    case 'move':
+      return `[DRAW:${shape.kind}:${shape.coords.join(',')}${label}]`;
     default:
       return '';
   }

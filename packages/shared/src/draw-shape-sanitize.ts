@@ -52,7 +52,9 @@ export function sanitizeDrawShape(shape: CanvasDrawShape): CanvasDrawShape | nul
       return { ...shape, coords: [sx, sy, ex, ey] };
     }
     case 'label':
-    case 'work': {
+    case 'work':
+    case 'key':
+    case 'gloss': {
       const [x, y] = shape.coords;
       if ([x, y].some((n) => isNaN(n))) return null;
       return { ...shape, coords: [clamp01(x), clamp01(y)] };
@@ -62,6 +64,18 @@ export function sanitizeDrawShape(shape: CanvasDrawShape): CanvasDrawShape | nul
       if ([x, y].some((n) => isNaN(n))) return null;
       const safeSize = Math.min(0.06, Math.max(0.01, size ?? 0.02));
       return { ...shape, coords: [clamp01(x), clamp01(y), safeSize] };
+    }
+    case 'square': {
+      const [cx, cy, w, h] = shape.coords;
+      if ([cx, cy, w, h].some((n) => isNaN(n))) return null;
+      // A board square: bigger than a typo, smaller than a quarter of the screen.
+      const size = (n: number) => Math.min(0.25, Math.max(0.01, Math.abs(n)));
+      return { ...shape, coords: [clamp01(cx), clamp01(cy), size(w), size(h)] };
+    }
+    case 'move': {
+      const [x1, y1, x2, y2] = shape.coords;
+      if ([x1, y1, x2, y2].some((n) => isNaN(n))) return null;
+      return { ...shape, coords: [clamp01(x1), clamp01(y1), clamp01(x2), clamp01(y2)] };
     }
     default:
       return null;

@@ -14,3 +14,6 @@ release/
 
 # Local visual QA exports (do not commit)
 apps/desktop/build/qa-*.png
+
+# Accuracy-eval run outputs
+services/orchestrator/evals/results/

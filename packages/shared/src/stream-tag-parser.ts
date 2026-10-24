@@ -26,7 +26,23 @@ export interface CanvasDrawShape {
    * `work` is a written solution line (e.g. an equation) placed in blank space; unlike
    * other shapes it stays on screen for the rest of the explanation.
    */
-  kind: 'circle' | 'rect' | 'arrow' | 'underline' | 'highlight' | 'label' | 'rightangle' | 'work';
+  kind:
+    | 'circle'
+    | 'rect'
+    | 'arrow'
+    | 'underline'
+    | 'highlight'
+    | 'label'
+    | 'rightangle'
+    | 'work'
+    /** Keyboard shortcut drawn as keycaps at x,y; label "Ctrl+J" */
+    | 'key'
+    /** Meaning of a word written under it; x,y = the word's center, label "word|meaning" */
+    | 'gloss'
+    /** One board square boxed: cx,cy,w,h (from a chess [DRAW:square:e4]) */
+    | 'square'
+    /** A move drawn on the board from square center to square center: x1,y1,x2,y2 */
+    | 'move';
   /** Normalized 0–1 coordinates; meaning depends on kind */
   coords: number[];
   label?: string;
@@ -111,6 +127,15 @@ function parseDrawContent(content: string): CanvasDrawShape | 'clear' | null {
       const size = nums.length >= 3 && !isNaN(nums[2]) ? nums[2] : 0.02;
       return { kind: 'rightangle', coords: [nums[0], nums[1], size] };
     }
+    case 'key':
+    case 'gloss':
+      if (nums.length < 2 || nums.slice(0, 2).some(isNaN) || !label) return null;
+      return { kind: kind as 'key' | 'gloss', coords: nums.slice(0, 2), label };
+    case 'square':
+    case 'move':
+      // Square names ([DRAW:square:e4]) are resolved to numbers on the server first.
+      if (nums.length < 4 || nums.slice(0, 4).some(isNaN)) return null;
+      return { kind: kind as 'square' | 'move', coords: nums.slice(0, 4), label };
     default:
       return null;
   }
@@ -149,6 +174,12 @@ function findAllTags(text: string): RawTagMatch[] {
         event: sanitized ? { type: 'draw', shape: sanitized } : null,
       });
     }
+  }
+
+  // A chess [BOARD] tag is normally resolved and removed on the server; never show one.
+  const boardRegex = /\[BOARD:[^\]]*\]/gi;
+  while ((match = boardRegex.exec(text)) !== null) {
+    matches.push({ start: match.index, end: match.index + match[0].length, event: null });
   }
 
   return matches.sort((a, b) => a.start - b.start);

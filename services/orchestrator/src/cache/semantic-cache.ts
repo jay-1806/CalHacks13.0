@@ -84,6 +84,7 @@ export function buildTutorResponseCacheKey(
 ): string {
   const payload = [
     input.mode,
+    input.subject ?? 'auto',
     input.question.trim().toLowerCase(),
     screenshotHash ?? 'no-screenshot',
     input.demoLessonId ?? '',
@@ -109,6 +110,7 @@ export function buildTutorSimilarityHint(
     scope: {
       kind: 'tutor',
       mode: input.mode,
+      subject: input.subject ?? 'auto',
       screenshot: screenshotHash ?? 'no-screenshot',
       lesson: input.demoLessonId ?? '',
       style: input.learnerPreferences?.explanationStyle ?? '',

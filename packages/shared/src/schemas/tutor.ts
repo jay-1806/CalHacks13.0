@@ -14,6 +14,13 @@ import { SessionTurn } from './memory.js';
 export const TutorMode = z.enum(['explain']);
 export type TutorMode = z.infer<typeof TutorMode>;
 
+/**
+ * What is being taught. Each subject has its own lesson pack (drawing rules and
+ * pacing); when a request doesn't name one, the tutor decides from the screenshot.
+ */
+export const Subject = z.enum(['math', 'software', 'chess', 'language', 'general']);
+export type Subject = z.infer<typeof Subject>;
+
 // ---------------------------------------------------------------------------
 // Screen Metadata
 // ---------------------------------------------------------------------------
@@ -70,6 +77,8 @@ export const TutorInput = z.object({
   sessionId: z.string(),
   mode: TutorMode.default('explain'),
   question: z.string().min(1),
+  /** Teach this subject; omit to let the tutor decide from the screen */
+  subject: Subject.optional(),
   screenshotBase64: z.string().optional(),
   screenMetadata: ScreenMetadata.optional(),
   appMetadata: AppMetadata.optional(),
@@ -100,6 +109,8 @@ export type PointTarget = z.infer<typeof PointTarget>;
 
 export const TutorResponse = z.object({
   mode: TutorMode.optional(),
+  /** The subject this answer was taught as */
+  subject: Subject.optional(),
   summary: z.string(),
   spokenExplanation: z.string().optional(), // backward compatibility
   spokenText: z.string(),

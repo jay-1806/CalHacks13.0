@@ -69,6 +69,20 @@ export function mapShapeThroughCaptureRegion(
       const p2 = mapPt(c, d);
       return { ...shape, coords: [p1.x, p1.y, p2.x, p2.y] };
     }
+    case 'square': {
+      const p = mapPt(a, b);
+      return { ...shape, coords: [p.x, p.y, c * region.width, d * region.height] };
+    }
+    case 'move': {
+      const p1 = mapPt(a, b);
+      const p2 = mapPt(c, d);
+      return { ...shape, coords: [p1.x, p1.y, p2.x, p2.y] };
+    }
+    case 'key':
+    case 'gloss': {
+      const p = mapPt(a, b);
+      return { ...shape, coords: [p.x, p.y] };
+    }
     case 'label':
     case 'work':
     case 'rightangle': {

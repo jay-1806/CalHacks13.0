@@ -12,12 +12,13 @@ import {
 } from '../cache/semantic-cache.js';
 import { config } from '../config.js';
 import { privacyGuard, PrivacyBlockedError } from '../privacy/privacy-guard.js';
-import { MATH_LESSON_PROMPT } from '../prompts/tutor-system-prompt.js';
+import { buildSubjectPrompt } from '../prompts/subject-packs.js';
 import * as Sentry from '@sentry/node';
 
 /**
- * One tutoring turn: privacy check → learner context → cache → Claude explains and
- * works the math problem on screen. Memory and cache writes happen in the background.
+ * One tutoring turn: privacy check → learner context → cache → Claude teaches what is
+ * on screen, following the lesson pack for its subject (named in the request, or
+ * chosen by Claude from the screenshot). Memory and cache writes happen in the background.
  */
 export class TutorOrchestrator {
   private semanticCache: SemanticCache;
@@ -130,7 +131,7 @@ export class TutorOrchestrator {
           this.observability.addSpan(traceId, 'ClaudeModelCall');
           const aiSpan = Sentry.startInactiveSpan({ name: 'claude-vision', op: 'ai' });
           try {
-            response = await this.aiProvider.analyzeScreenAndQuestion(input, onDelta, MATH_LESSON_PROMPT);
+            response = await this.aiProvider.analyzeScreenAndQuestion(input, onDelta, buildSubjectPrompt(input.subject));
           } catch (err) {
             Sentry.captureException(err);
             throw err;
@@ -184,6 +185,7 @@ export class TutorOrchestrator {
           provider: response.provider || 'unknown',
           pointTagPresent: !!response.pointTarget,
           pointTagValid: evaluations['point_tag_valid']?.passed,
+          subject: response.subject,
           responseLength: (response.spokenText || '').length,
           semanticCacheHit: fromCache,
         });

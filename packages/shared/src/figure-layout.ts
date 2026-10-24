@@ -3,9 +3,9 @@ import type { CanvasDrawShape, StreamEvent } from './stream-tag-parser.js';
 
 type Pt = { x: number; y: number };
 
-/** Working lines and loose labels are written beside the figure, not on it. */
+/** Working lines, loose labels, shortcuts and glosses are written beside the figure, not on it. */
 function isFigureMark(shape: CanvasDrawShape): boolean {
-  return shape.kind !== 'work' && shape.kind !== 'label';
+  return !['work', 'label', 'key', 'gloss'].includes(shape.kind);
 }
 
 /**

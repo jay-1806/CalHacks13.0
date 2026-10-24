@@ -1,5 +1,5 @@
 import { AIProvider } from './ai-provider.js';
-import { TutorInput, TutorResponse, prepareOverlayText, stripForTts } from '@screentutor/shared';
+import { Subject, TutorInput, TutorResponse, prepareOverlayText, stripForTts } from '@screentutor/shared';
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { buildUserPrompt, TUTOR_SYSTEM_PROMPT } from '../prompts/tutor-system-prompt.js';
@@ -13,12 +13,13 @@ export const TUTOR_OUTPUT_SCHEMA = {
   type: 'object',
   properties: {
     spokenText: { type: 'string' },
+    subject: { type: 'string', enum: [...Subject.options] },
     visualText: { type: 'string' },
     summary: { type: 'string' },
     concept: { type: 'string' },
     confidence: { type: 'number' },
   },
-  required: ['spokenText', 'visualText', 'summary', 'concept', 'confidence'],
+  required: ['spokenText', 'subject', 'visualText', 'summary', 'concept', 'confidence'],
   additionalProperties: false,
 } as const;
 
@@ -150,6 +151,8 @@ export class ClaudeProvider implements AIProvider {
       parsed.confidence = parsed.confidence ?? 1.0;
       parsed.summary = parsed.summary || prepared.displayText.slice(0, 80) || 'Explanation';
       parsed.mode = parsed.mode || input.mode;
+      // A subject the request asked for wins over what the model reported.
+      parsed.subject = input.subject ?? (Subject.safeParse(parsed.subject).success ? parsed.subject : 'general');
       parsed.provider = 'claude';
       parsed.timestamp = new Date().toISOString();
       parsed.rawModelText = textResponse;

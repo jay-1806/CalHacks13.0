@@ -16,6 +16,8 @@ const INK = '#ff5b2e';
 const INK_ACCENT = '#ffb000';
 const INK_HALO = 'rgba(10, 12, 20, 0.55)';
 const MARKER = 'rgba(255, 214, 0, 0.38)';
+/** Chess move arrows: green, so they read apart from the orange squares */
+const MOVE_INK = '#2fbf71';
 
 export function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   const dpr = window.devicePixelRatio || 1;
@@ -178,22 +180,38 @@ function buildStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
     }
     case 'underline':
       return [sketchLine({ x: a * W, y: b * H }, { x: c * W, y: d * H }, rand)];
-    case 'arrow': {
+    case 'arrow':
+      return arrowStrokes({ x: a * W, y: b * H }, { x: c * W, y: d * H }, rand);
+    case 'move': {
+      // Square center to square center, stopping a little short so the pieces stay visible.
       const from = { x: a * W, y: b * H };
       const to = { x: c * W, y: d * H };
-      const shaft = sketchLine(from, to, rand);
-      const tip = shaft[shaft.length - 1];
-      const angle = Math.atan2(to.y - from.y, to.x - from.x);
-      const head = Math.max(12, Math.min(24, Math.hypot(to.x - from.x, to.y - from.y) * 0.14));
-      const barb = (side: number) => {
-        const spread = Math.PI / 7 + (rand() - 0.5) * 0.15;
-        return sketchLine(
-          tip,
-          { x: tip.x - head * Math.cos(angle + side * spread), y: tip.y - head * Math.sin(angle + side * spread) },
-          rand
-        );
-      };
-      return [shaft, barb(-1), barb(1)];
+      const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+      const trim = Math.min(14, len * 0.15);
+      const ux = (to.x - from.x) / len;
+      const uy = (to.y - from.y) / len;
+      return arrowStrokes(
+        { x: from.x + ux * trim, y: from.y + uy * trim },
+        { x: to.x - ux * trim, y: to.y - uy * trim },
+        rand
+      );
+    }
+    case 'square': {
+      // A box drawn just inside the square's edges.
+      const hw = (c * W) / 2 - 3;
+      const hh = (d * H) / 2 - 3;
+      const x1 = a * W - hw;
+      const y1 = b * H - hh;
+      const x2 = a * W + hw;
+      const y2 = b * H + hh;
+      return [
+        joinStrokes([
+          sketchLine({ x: x1, y: y1 }, { x: x2, y: y1 }, rand),
+          sketchLine({ x: x2, y: y1 }, { x: x2, y: y2 }, rand),
+          sketchLine({ x: x2, y: y2 }, { x: x1, y: y2 }, rand),
+          sketchLine({ x: x1, y: y2 }, { x: x1, y: y1 }, rand),
+        ]),
+      ];
     }
     case 'rightangle': {
       const s = Math.max(16, (c ?? 0.02) * minDim);
@@ -212,6 +230,23 @@ function buildStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
     default:
       return [];
   }
+}
+
+/** A hand-drawn arrow: a slightly bowed shaft and two quick strokes for the head. */
+function arrowStrokes(from: Pt, to: Pt, rand: () => number): Pt[][] {
+  const shaft = sketchLine(from, to, rand);
+  const tip = shaft[shaft.length - 1];
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const head = Math.max(12, Math.min(24, Math.hypot(to.x - from.x, to.y - from.y) * 0.14));
+  const barb = (side: number) => {
+    const spread = Math.PI / 7 + (rand() - 0.5) * 0.15;
+    return sketchLine(
+      tip,
+      { x: tip.x - head * Math.cos(angle + side * spread), y: tip.y - head * Math.sin(angle + side * spread) },
+      rand
+    );
+  };
+  return [shaft, barb(-1), barb(1)];
 }
 
 function shapeStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
@@ -310,8 +345,160 @@ export function drawShapeOnCanvas(
       // Handwritten left to right as it appears; stays for the rest of the explanation.
       drawWorkLine(ctx, a * W, b * H, shape.label ?? '', minDim, progress);
       break;
+    case 'square':
+      // A soft tint so the square reads even under a piece, then the ink box.
+      ctx.save();
+      ctx.globalAlpha *= 0.22 * t;
+      ctx.fillStyle = INK;
+      ctx.fillRect(a * W - (c * W) / 2, b * H - (d * H) / 2, c * W, d * H);
+      ctx.restore();
+      drawStrokes(ctx, shapeStrokes(shape, W, H), t, pen);
+      break;
+    case 'move':
+      drawStrokes(ctx, shapeStrokes(shape, W, H), t, { ...pen, color: MOVE_INK, width: pen.width * 1.4 });
+      break;
+    case 'key':
+      drawKeycaps(ctx, a * W, b * H, shape.label ?? '', t);
+      break;
+    case 'gloss':
+      drawGloss(ctx, a * W, b * H, shape.label ?? '', minDim, t);
+      break;
   }
 
+  ctx.restore();
+}
+
+/**
+ * A keyboard shortcut as keycaps ("Ctrl+Shift+N" → [Ctrl] + [Shift] + [N]),
+ * left-anchored at (x, y) and kept on screen.
+ */
+export function drawKeycaps(ctx: CanvasRenderingContext2D, x: number, y: number, combo: string, progress = 1) {
+  // Split on "+" between keys, but keep a lone "+" key ("Ctrl++").
+  const keys = combo
+    .split(/\s*\+\s*(?=.)/)
+    .map((k) => k.trim() || '+')
+    .filter(Boolean);
+  if (keys.length === 0) return;
+  ctx.save();
+  ctx.globalAlpha *= Math.min(1, progress * 1.6);
+  const fontSize = 15;
+  const keyFont = `700 ${fontSize}px "Segoe UI", -apple-system, system-ui, sans-serif`;
+  ctx.font = keyFont;
+  const padX = 9;
+  const capH = fontSize + 14;
+  const gap = 18;
+  const widths = keys.map((k) => Math.max(capH, ctx.measureText(k).width + padX * 2));
+  const total = widths.reduce((sum, w) => sum + w, 0) + gap * (keys.length - 1);
+  let left = Math.max(8, Math.min(x, ctx.canvas.clientWidth - total - 8));
+  const top = y - capH / 2;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  keys.forEach((key, i) => {
+    const w = widths[i];
+    // Key body with a darker base, like a real keycap.
+    ctx.fillStyle = 'rgba(10, 12, 20, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(left, top + 3, w, capH, 7);
+    ctx.fill();
+    ctx.fillStyle = '#fbfbfd';
+    ctx.strokeStyle = 'rgba(35, 45, 61, 0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(left, top, w, capH, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#232d3d';
+    ctx.font = keyFont;
+    ctx.fillText(key, left + w / 2, top + capH / 2 + 1);
+    left += w;
+    if (i < keys.length - 1) {
+      ctx.fillStyle = INK;
+      ctx.font = `700 ${fontSize + 4}px ${HAND_FONT}`;
+      ctx.fillText('+', left + gap / 2, top + capH / 2);
+      left += gap;
+    }
+  });
+  ctx.restore();
+}
+
+/** Notes drawn so far in the current frame, so the next one can avoid them. */
+let glossesThisFrame: { x: number; y: number; w: number; h: number }[] = [];
+
+/** Call once per frame before drawing shapes (gloss notes are laid out per frame). */
+export function beginOverlayFrame() {
+  glossesThisFrame = [];
+}
+
+/**
+ * A word's meaning written just under the word ("biblioteca|library|bee-blee-oh-TEH-kah"):
+ * a small caret up to the word and a handwritten note with the meaning and, when
+ * given, how to say it.
+ */
+export function drawGloss(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  label: string,
+  minDim: number,
+  progress = 1
+) {
+  const parts = label.split('|').map((p) => p.trim());
+  const meaning = parts.length > 1 ? parts[1] : parts[0];
+  const pronunciation = parts[2];
+  ctx.save();
+  ctx.globalAlpha *= Math.min(1, progress * 1.6);
+  const fontSize = Math.round(Math.max(20, Math.min(30, minDim * 0.026)));
+  const small = Math.round(fontSize * 0.72);
+  ctx.font = `700 ${fontSize}px ${HAND_FONT}`;
+  const meaningW = ctx.measureText(meaning).width;
+  ctx.font = `600 ${small}px ${HAND_FONT}`;
+  const pronW = pronunciation ? ctx.measureText(pronunciation).width : 0;
+  const padX = fontSize * 0.45;
+  const w = Math.max(meaningW, pronW) + padX * 2;
+  const h = fontSize * 1.45 + (pronunciation ? small + 4 : 0);
+  const caretTop = y + fontSize * 0.55;
+  const left = Math.max(8, Math.min(x - w / 2, ctx.canvas.clientWidth - w - 8));
+  // Neighbouring words' notes would overlap: stack this one below any it would hit.
+  let top = caretTop + 8;
+  const hits = (r: { x: number; y: number; w: number; h: number }) =>
+    left < r.x + r.w + 4 && r.x < left + w + 4 && top < r.y + r.h + 4 && r.y < top + h + 4;
+  for (let guard = 0; guard < 8 && glossesThisFrame.some(hits); guard++) {
+    top = Math.max(...glossesThisFrame.filter(hits).map((r) => r.y + r.h)) + 6;
+  }
+  glossesThisFrame.push({ x: left, y: top, w, h });
+
+  // Caret from the note up to the word (a stem first when the note was stacked lower).
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (top > caretTop + 10) {
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, caretTop + 6);
+  }
+  ctx.moveTo(x - 6, caretTop + 7);
+  ctx.lineTo(x, caretTop);
+  ctx.lineTo(x + 6, caretTop + 7);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(14, 16, 28, 0.9)';
+  ctx.strokeStyle = 'rgba(255, 91, 46, 0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, 10);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#fff1c1';
+  ctx.font = `700 ${fontSize}px ${HAND_FONT}`;
+  ctx.fillText(meaning, left + w / 2, top + fontSize * 0.2);
+  if (pronunciation) {
+    ctx.fillStyle = 'rgba(255, 241, 193, 0.75)';
+    ctx.font = `600 ${small}px ${HAND_FONT}`;
+    ctx.fillText(pronunciation, left + w / 2, top + fontSize * 1.25);
+  }
   ctx.restore();
 }
 

@@ -18,6 +18,7 @@ import type { OverlayExplanationPayload } from '../types/explanation';
 import {
   setupCanvas,
   drawShapeOnCanvas,
+  beginOverlayFrame,
   drawEnhancedPointer,
   sideMarkGap,
   DRAW_STROKE_MS,
@@ -32,6 +33,8 @@ const CHAR_STREAM_MS = 30;
 const TRAIL_LENGTH = 6;
 /** Opacity of earlier steps' diagram marks: the current step stands out, earlier ones stay readable */
 const FADED_SHAPE_ALPHA = 0.6;
+/** Written notes (working lines, word meanings) stay at full strength for the whole lesson */
+const STAYS_FULL = new Set<CanvasDrawShape['kind']>(['work', 'gloss']);
 /** How long a finished explanation stays on screen before it fades away */
 const ERASE_AFTER_MS = 8000;
 const ERASE_FADE_MS = 1200;
@@ -207,8 +210,8 @@ export default function AnnotationOverlay() {
       lastPointLabelRef.current = event.label;
       if (!replay) enqueuePoint(mapped.x * W, mapped.y * H, event.label);
     } else if (event.type === 'clear') {
-      // Clear only this step's marks: written working and earlier steps' faded marks persist.
-      shapesRef.current = shapesRef.current.filter((s) => s.faded || s.shape.kind === 'work');
+      // Clear only this step's marks: written notes and earlier steps' faded marks persist.
+      shapesRef.current = shapesRef.current.filter((s) => s.faded || STAYS_FULL.has(s.shape.kind));
       lastPointNormRef.current = null;
       lastPointLabelRef.current = '';
     } else if (event.type === 'draw') {
@@ -220,7 +223,7 @@ export default function AnnotationOverlay() {
         id: `shape-${shapeIdRef.current++}`,
         shape: anchored,
         createdAt: replay ? 0 : performance.now(),
-        faded: replay && anchored.kind !== 'work',
+        faded: replay && !STAYS_FULL.has(anchored.kind),
       });
     }
   };
@@ -391,6 +394,7 @@ export default function AnnotationOverlay() {
 
     ctx.clearRect(0, 0, W, H);
 
+    beginOverlayFrame();
     for (const active of shapesRef.current) {
       const fadeT = Math.min(1, (timestamp - active.createdAt) / FADE_IN_MS);
       const strokeT = Math.min(1, (timestamp - active.createdAt) / DRAW_STROKE_MS);

@@ -13,6 +13,7 @@ export * from './sponsors.js';
 export * from './point-parser.js';
 export * from './overlay-refine.js';
 export * from './figure-layout.js';
+export * from './chess-board.js';
 export * from './draw-shape-sanitize.js';
 export * from './stream-tag-parser.js';
 export * from './overlay-text.js';
