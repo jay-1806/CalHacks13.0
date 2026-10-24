@@ -2,7 +2,8 @@ import type { CanvasDrawShape } from './stream-tag-parser.js';
 import { sanitizeDrawShape } from './draw-shape-sanitize.js';
 
 const POINT_INNER = /\[POINT:([^\]]+)\]/i;
-const DRAW_INNER = /\[DRAW:([^\]]+)\]/gi;
+/** DRAW bodies may hold one level of brackets (working lines like "= [x²/2]₂⁴"). */
+const DRAW_INNER = /\[DRAW:((?:[^\[\]]|\[[^\[\]]*\])+)\]/gi;
 
 const ANCHOR_DRIFT = 0.07;
 const MAX_SNAPPED_SPAN = 0.45;
@@ -95,7 +96,7 @@ export function dedupeRedundantTagLabels(text: string): string {
     .split('\n')
     .map((line) => {
       const drawLabelsInLine: string[] = [];
-      for (const m of line.matchAll(/\[DRAW:(?!clear)([^\]]+)\]/gi)) {
+      for (const m of line.matchAll(/\[DRAW:(?!clear)((?:[^\[\]]|\[[^\[\]]*\])+)\]/gi)) {
         const inner = m[1].trim();
         const parts = inner.split(':');
         if (parts.length > 2) {
@@ -103,7 +104,7 @@ export function dedupeRedundantTagLabels(text: string): string {
         }
       }
 
-      const tagRegex = /\[(POINT|DRAW):([^\]]+)\]/gi;
+      const tagRegex = /\[(POINT|DRAW):((?:[^\[\]]|\[[^\[\]]*\])+)\]/gi;
       let result = '';
       let lastIndex = 0;
       let proseSoFar = '';
@@ -290,7 +291,7 @@ export function refineOverlayAnnotationTags(text: string): string {
   let drawCount = 0;
   const MAX_DRAWS = 20;
 
-  const tagRegex = /\[(POINT|DRAW):([^\]]+)\]/gi;
+  const tagRegex = /\[(POINT|DRAW):((?:[^\[\]]|\[[^\[\]]*\])+)\]/gi;
   let match: RegExpExecArray | null;
 
   while ((match = tagRegex.exec(text)) !== null) {

@@ -77,3 +77,12 @@ describe('pointBesideWork', () => {
     expect(steps[0].events.find((e) => e.type === 'point')).toMatchObject({ label: '' });
   });
 });
+
+describe('working lines with brackets', () => {
+  it('keeps a bracketed evaluation inside its DRAW tag', () => {
+    const parsed = parseStreamTags('[DRAW:clear] Integrate [POINT:0.65,0.68:] [DRAW:work:0.63,0.68:= [x²/2]₂⁴]');
+    expect(parsed.visibleText.trim()).toBe('Integrate');
+    const work = parsed.events.find((e) => e.type === 'draw');
+    expect(work?.type === 'draw' && work.shape.label).toBe('= [x²/2]₂⁴');
+  });
+});

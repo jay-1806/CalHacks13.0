@@ -36,6 +36,9 @@ const CHAR_STREAM_MS = 30;
 const TRAIL_LENGTH = 6;
 /** Opacity of earlier steps' diagram marks: the current step stands out, earlier ones stay readable */
 const FADED_SHAPE_ALPHA = 0.6;
+/** How long a finished explanation stays on screen before it fades away */
+const ERASE_AFTER_MS = 8000;
+const ERASE_FADE_MS = 1200;
 interface QueuedPoint {
   px: number;
   py: number;
@@ -145,6 +148,9 @@ export default function AnnotationOverlay() {
   }>({ steps: [], stepIndex: -1 });
   const narrationStartedRef = useRef(false);
   const charStreamFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eraseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** When the fade-out began, while a finished explanation is being erased */
+  const eraseStartRef = useRef<number | null>(null);
 
   const stopCharStream = () => {
     const stream = streamRef.current;
@@ -254,6 +260,7 @@ export default function AnnotationOverlay() {
       } else {
         dispatchStreamEventsUpTo(stream.visibleText.length, stream.events);
         stopCharStream();
+        scheduleErase();
       }
     }, CHAR_STREAM_MS);
   };
@@ -287,6 +294,45 @@ export default function AnnotationOverlay() {
 
     setDisplayedText(steps.map((step) => step.display).filter(Boolean).join('\n'));
     applyNarrationStep(steps.length - 1, steps);
+    scheduleErase();
+  };
+
+  /** After an explanation ends, leave it up for a while, then fade it all away. */
+  const scheduleErase = () => {
+    cancelErase();
+    eraseTimerRef.current = setTimeout(() => {
+      eraseTimerRef.current = null;
+      eraseStartRef.current = performance.now();
+    }, ERASE_AFTER_MS);
+  };
+
+  const cancelErase = () => {
+    if (eraseTimerRef.current) clearTimeout(eraseTimerRef.current);
+    eraseTimerRef.current = null;
+    eraseStartRef.current = null;
+    if (canvasRef.current) canvasRef.current.style.opacity = '';
+    if (bubbleRef.current) bubbleRef.current.style.opacity = '';
+  };
+
+  const clearOverlayNow = () => {
+    cancelErase();
+    stopCharStream();
+    stopNarration();
+    narrationStartedRef.current = false;
+    if (charStreamFallbackRef.current) {
+      clearTimeout(charStreamFallbackRef.current);
+      charStreamFallbackRef.current = null;
+    }
+    setPoint(null);
+    shapesRef.current = [];
+    pointerQueueRef.current = [];
+    moveRef.current = null;
+    arrivalBurstRef.current = null;
+    setDisplayedText('');
+    setIsMinimized(false);
+    setShowFullText(false);
+    setDragOffset({ x: 0, y: 0 });
+    setIsVisible(false);
   };
 
   /**
@@ -299,6 +345,7 @@ export default function AnnotationOverlay() {
     captureRegion?: CaptureRegion | null
   ) => {
     captureRegionRef.current = captureRegion ?? null;
+    cancelErase();
     stopCharStream();
     if (charStreamFallbackRef.current) {
       clearTimeout(charStreamFallbackRef.current);
@@ -445,6 +492,16 @@ export default function AnnotationOverlay() {
       );
     }
 
+    if (eraseStartRef.current !== null) {
+      const left = 1 - (timestamp - eraseStartRef.current) / ERASE_FADE_MS;
+      if (left <= 0) {
+        clearOverlayNow();
+      } else {
+        canvas.style.opacity = String(left);
+        if (bubbleRef.current) bubbleRef.current.style.opacity = String(left);
+      }
+    }
+
     rafRef.current = requestAnimationFrame(renderFrame.current);
   });
 
@@ -482,6 +539,7 @@ export default function AnnotationOverlay() {
         return;
       }
 
+      cancelErase();
       stopCharStream();
       stopNarration();
       narrationStartedRef.current = false;
@@ -512,25 +570,7 @@ export default function AnnotationOverlay() {
       setIsVisible(true);
     });
 
-    window.electronAPI.onOverlayClear(() => {
-      stopCharStream();
-      stopNarration();
-      narrationStartedRef.current = false;
-      if (charStreamFallbackRef.current) {
-        clearTimeout(charStreamFallbackRef.current);
-        charStreamFallbackRef.current = null;
-      }
-      setPoint(null);
-      shapesRef.current = [];
-      pointerQueueRef.current = [];
-      moveRef.current = null;
-      arrivalBurstRef.current = null;
-      setDisplayedText('');
-      setIsMinimized(false);
-      setShowFullText(false);
-      setDragOffset({ x: 0, y: 0 });
-      setIsVisible(false);
-    });
+    window.electronAPI.onOverlayClear(clearOverlayNow);
 
     window.electronAPI.onOverlayNarrationStart((data: {
       spokenText: string;
@@ -559,6 +599,7 @@ export default function AnnotationOverlay() {
 
     window.electronAPI.onRestoreExplanation((data: OverlayExplanationPayload) => {
       if (!data?.pointTarget || data.pointTarget.x === null || data.pointTarget.y === null) return;
+      cancelErase();
 
       pointerPosRef.current = { x: data.pointTarget.x, y: data.pointTarget.y };
       shapesRef.current = [];
@@ -607,9 +648,11 @@ export default function AnnotationOverlay() {
   }, [point, isMinimized, isRegionSelecting]);
 
   useEffect(() => {
+    // Once the voice-synced narration has started it owns the overlay. This render
+    // can land after it started (the point and narration messages arrive back to
+    // back), and must not tear it down for the timer-driven fallback below.
+    if (narrationStartedRef.current) return;
     stopCharStream();
-    stopNarration();
-    narrationStartedRef.current = false;
     if (charStreamFallbackRef.current) {
       clearTimeout(charStreamFallbackRef.current);
       charStreamFallbackRef.current = null;

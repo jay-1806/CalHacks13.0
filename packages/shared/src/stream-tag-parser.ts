@@ -43,7 +43,8 @@ export interface ParsedStreamText {
 }
 
 const POINT_TAG_REGEX = /\[POINT:([^\]]+)\]/gi;
-const DRAW_TAG_REGEX = /\[DRAW:([^\]]+)\]/gi;
+/** A DRAW tag's body may hold one level of brackets, e.g. [DRAW:work:0.7,0.4:= [x²/2]₂⁴] */
+const DRAW_TAG_REGEX = /\[DRAW:((?:[^\[\]]|\[[^\[\]]*\])+)\]/gi;
 
 interface RawTagMatch {
   start: number;
