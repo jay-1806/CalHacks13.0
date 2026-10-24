@@ -1,3 +1,4 @@
+import { pointBesideWork } from './figure-layout.js';
 import { parseStreamTags, type StreamEvent } from './stream-tag-parser.js';
 
 export interface NarrationStep {
@@ -48,7 +49,7 @@ export function buildNarrationSteps(spokenText: string, overlayText: string): Na
       spoken,
       display: visibleText.trim(),
       overlaySegment,
-      events,
+      events: pointBesideWork(events),
     });
   }
 

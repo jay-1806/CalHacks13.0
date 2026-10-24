@@ -30,6 +30,11 @@ export interface CanvasDrawShape {
   /** Normalized 0–1 coordinates; meaning depends on kind */
   coords: number[];
   label?: string;
+  /**
+   * The middle of the figure this mark belongs to (normalized), set by the overlay:
+   * side marks sit just outside the figure and corner marks open into it.
+   */
+  toward?: { x: number; y: number };
 }
 
 export interface ParsedStreamText {

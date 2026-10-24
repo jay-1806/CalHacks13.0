@@ -1,12 +1,19 @@
 import type { CanvasDrawShape } from '@screentutor/shared';
+import { inkStroke, joinStrokes, penEase, seededRandom, sketchEllipse, sketchLine, type InkStyle, type Pt } from './sketch';
 
 const POINTER_OUTER_R = 14;
 const ARRIVAL_BURST_MS = 400;
-export const DRAW_STROKE_MS = 450;
+/** How long the pen takes to draw one mark */
+export const DRAW_STROKE_MS = 650;
 
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
-}
+/** Handwriting for labels and working, bundled with the app (@fontsource/caveat). */
+export const HAND_FONT = '"Caveat", "Segoe Print", "Bradley Hand", cursive';
+
+/** Pen colours: bright enough to read over black diagram lines, with a dark halo for white pages. */
+const INK = '#ff5b2e';
+const INK_ACCENT = '#ffb000';
+const INK_HALO = 'rgba(10, 12, 20, 0.55)';
+const MARKER = 'rgba(255, 214, 0, 0.38)';
 
 export function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   const dpr = window.devicePixelRatio || 1;
@@ -23,6 +30,10 @@ export function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D
   return ctx;
 }
 
+function labelFontSize(equation: boolean): number {
+  return equation ? 24 : 22;
+}
+
 export function drawCanvasLabel(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -33,67 +44,208 @@ export function drawCanvasLabel(
   const alpha = options?.alpha ?? 1;
   const equation = options?.equation ?? false;
   ctx.save();
-  ctx.globalAlpha = alpha;
-  const fontSize = equation ? 15 : 13;
-  const font = equation
-    ? `600 ${fontSize}px "JetBrains Mono", "Fira Code", ui-monospace, monospace`
-    : `500 ${fontSize}px Inter, system-ui, sans-serif`;
-  ctx.font = font;
-  const paddingX = equation ? 14 : 10;
-  const paddingY = equation ? 10 : 5;
+  ctx.globalAlpha *= alpha;
+  const fontSize = labelFontSize(equation);
+  ctx.font = `700 ${fontSize}px ${HAND_FONT}`;
+  const paddingX = 12;
+  const paddingY = 4;
   const textWidth = ctx.measureText(text).width;
   const boxW = textWidth + paddingX * 2;
   const boxH = fontSize + paddingY * 2;
   const boxX = x - boxW / 2;
-  const boxY = y - boxH - 8;
+  const boxY = y - boxH - 10;
 
-  if (equation) {
-    ctx.fillStyle = 'rgba(10, 14, 30, 0.92)';
-    ctx.strokeStyle = 'rgba(59, 139, 212, 0.7)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 8);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#a8d4ff';
-  } else {
-    ctx.fillStyle = 'rgba(30, 30, 30, 0.88)';
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 8);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-  }
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, x, boxY + boxH / 2);
-  ctx.restore();
-}
-
-/** A written solution line ("working"), left-anchored at (x, y) and sized to the screen. */
-export function drawWorkLine(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, minDim: number) {
-  const fontSize = Math.round(Math.max(18, Math.min(30, minDim * 0.024)));
-  ctx.save();
-  ctx.shadowBlur = 0;
-  ctx.font = `600 ${fontSize}px "JetBrains Mono", "Fira Code", ui-monospace, monospace`;
-  const padX = fontSize * 0.6;
-  const padY = fontSize * 0.35;
-  const boxW = ctx.measureText(text).width + padX * 2;
-  const boxH = fontSize + padY * 2;
-  const boxX = Math.min(x, ctx.canvas.clientWidth - boxW - 8);
-  const boxY = y - boxH / 2;
-  ctx.fillStyle = 'rgba(10, 14, 30, 0.86)';
-  ctx.strokeStyle = 'rgba(255, 196, 61, 0.85)';
+  ctx.fillStyle = 'rgba(14, 16, 28, 0.9)';
+  ctx.strokeStyle = equation ? 'rgba(255, 214, 102, 0.75)' : 'rgba(255, 91, 46, 0.8)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.roundRect(boxX, boxY, boxW, boxH, 10);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = '#ffe39a';
+  ctx.fillStyle = equation ? '#fff1c1' : '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, boxY + boxH / 2 + 1);
+  ctx.restore();
+}
+
+function workFontSize(minDim: number): number {
+  return Math.round(Math.max(24, Math.min(40, minDim * 0.034)));
+}
+
+function workBox(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, minDim: number) {
+  const fontSize = workFontSize(minDim);
+  ctx.font = `700 ${fontSize}px ${HAND_FONT}`;
+  const padX = fontSize * 0.5;
+  const padY = fontSize * 0.2;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = fontSize + padY * 2;
+  return { x: Math.min(x, ctx.canvas.clientWidth - w - 8), y: y - h / 2, w, h, padX, fontSize };
+}
+
+/**
+ * A written solution line ("working"), left-anchored at (x, y): a small board
+ * the line is handwritten onto from left to right as `progress` goes 0 → 1.
+ */
+export function drawWorkLine(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+  minDim: number,
+  progress = 1
+) {
+  ctx.save();
+  const box = workBox(ctx, x, y, text, minDim);
+  ctx.fillStyle = 'rgba(14, 16, 28, 0.88)';
+  ctx.strokeStyle = 'rgba(255, 214, 102, 0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(box.x, box.y, box.w, box.h, 12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.rect(box.x, box.y, box.padX + (box.w - box.padX) * Math.max(0, Math.min(1, progress)), box.h);
+  ctx.clip();
+  ctx.fillStyle = '#fff1c1';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, boxX + padX, y);
+  ctx.fillText(text, box.x + box.padX, y + 1);
   ctx.restore();
+}
+
+interface ShapeInk {
+  key: string;
+  strokes: Pt[][];
+}
+
+/** Stroke geometry per shape and screen size: built once, so the wobble doesn't shimmer. */
+const inkCache = new WeakMap<CanvasDrawShape, ShapeInk>();
+
+/** Which way a corner mark opens: into the figure (or the middle of the screen if unknown). */
+function inward(v: number, mid: number): number {
+  return v <= mid ? 1 : -1;
+}
+
+/** Where a side mark's label goes: off its midpoint, on the outside of the figure. */
+function labelOutside(shape: CanvasDrawShape, W: number, H: number): Pt {
+  const [a, b, c, d] = shape.coords;
+  const mid = { x: ((a + c) / 2) * W, y: ((b + d) / 2) * H };
+  if (!shape.toward) return mid;
+  const dx = (c - a) * W;
+  const dy = (d - b) * H;
+  const len = Math.hypot(dx, dy) || 1;
+  let nx = -dy / len;
+  let ny = dx / len;
+  if (nx * (mid.x - shape.toward.x * W) + ny * (mid.y - shape.toward.y * H) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  // The chip is drawn above its anchor, so pull it down a little when going downward.
+  return { x: mid.x + nx * 34, y: mid.y + ny * 34 + (ny > 0.5 ? 34 : 0) };
+}
+
+function buildStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
+  const rand = seededRandom(`${shape.kind}:${shape.coords.join(',')}`);
+  const minDim = Math.min(W, H);
+  const [a, b, c, d] = shape.coords;
+
+  switch (shape.kind) {
+    case 'circle':
+      return [sketchEllipse(a * W, b * H, Math.max(14, c * minDim), rand)];
+    case 'rect': {
+      const x1 = a * W;
+      const y1 = b * H;
+      const x2 = (a + c) * W;
+      const y2 = (b + d) * H;
+      return [
+        joinStrokes([
+          sketchLine({ x: x1, y: y1 }, { x: x2, y: y1 }, rand),
+          sketchLine({ x: x2, y: y1 }, { x: x2, y: y2 }, rand),
+          sketchLine({ x: x2, y: y2 }, { x: x1, y: y2 }, rand),
+          sketchLine({ x: x1, y: y2 }, { x: x1, y: y1 }, rand),
+        ]),
+      ];
+    }
+    case 'highlight': {
+      // One marker swipe across the middle, as tall as the region.
+      const midY = (b + d / 2) * H;
+      const tilt = (rand() - 0.5) * Math.min(6, d * H * 0.15);
+      return [sketchLine({ x: a * W, y: midY + tilt }, { x: (a + c) * W, y: midY - tilt }, rand)];
+    }
+    case 'underline':
+      return [sketchLine({ x: a * W, y: b * H }, { x: c * W, y: d * H }, rand)];
+    case 'arrow': {
+      const from = { x: a * W, y: b * H };
+      const to = { x: c * W, y: d * H };
+      const shaft = sketchLine(from, to, rand);
+      const tip = shaft[shaft.length - 1];
+      const angle = Math.atan2(to.y - from.y, to.x - from.x);
+      const head = Math.max(12, Math.min(24, Math.hypot(to.x - from.x, to.y - from.y) * 0.14));
+      const barb = (side: number) => {
+        const spread = Math.PI / 7 + (rand() - 0.5) * 0.15;
+        return sketchLine(
+          tip,
+          { x: tip.x - head * Math.cos(angle + side * spread), y: tip.y - head * Math.sin(angle + side * spread) },
+          rand
+        );
+      };
+      return [shaft, barb(-1), barb(1)];
+    }
+    case 'rightangle': {
+      const s = Math.max(16, (c ?? 0.02) * minDim);
+      const px = a * W;
+      const py = b * H;
+      const mid = shape.toward ? { x: shape.toward.x * W, y: shape.toward.y * H } : { x: W / 2, y: H / 2 };
+      const dx = inward(px, mid.x) * s;
+      const dy = inward(py, mid.y) * s;
+      return [
+        joinStrokes([
+          sketchLine({ x: px + dx, y: py }, { x: px + dx, y: py + dy }, rand),
+          sketchLine({ x: px + dx, y: py + dy }, { x: px, y: py + dy }, rand),
+        ]),
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
+function shapeStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
+  const key = `${W}x${H}`;
+  const cached = inkCache.get(shape);
+  if (cached?.key === key) return cached.strokes;
+  const strokes = buildStrokes(shape, W, H);
+  inkCache.set(shape, { key, strokes });
+  return strokes;
+}
+
+function strokeLength(pts: Pt[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return len;
+}
+
+/** Draw strokes in order, the pen moving at one speed across all of them. */
+function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Pt[][], progress: number, style: InkStyle) {
+  const lens = strokes.map(strokeLength);
+  const total = lens.reduce((s, l) => s + l, 0) || 1;
+  let reach = progress * total;
+  strokes.forEach((pts, i) => {
+    if (reach <= 0) return;
+    inkStroke(ctx, pts, Math.min(1, reach / (lens[i] || 1)), style);
+    reach -= lens[i];
+  });
+}
+
+export function inkWidth(minDim: number): number {
+  return Math.max(3.5, Math.min(7, minDim * 0.0045));
+}
+
+/** How far outside a figure's side its arrow is drawn, in screen pixels. */
+export function sideMarkGap(minDim: number): number {
+  return inkWidth(minDim) * 2 + 8;
 }
 
 export function drawShapeOnCanvas(
@@ -104,114 +256,41 @@ export function drawShapeOnCanvas(
   alpha: number,
   progress = 1
 ) {
-  const t = easeOutCubic(Math.max(0, Math.min(1, progress)));
+  const t = penEase(progress);
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.shadowBlur = 10;
 
   const minDim = Math.min(W, H);
   const [a, b, c, d] = shape.coords;
+  const pen: InkStyle = { color: INK, width: inkWidth(minDim), halo: INK_HALO };
+  const labelAlpha = t > 0.85 ? (t - 0.85) / 0.15 : 0;
 
   switch (shape.kind) {
     case 'circle': {
-      const cx = a * W;
-      const cy = b * H;
-      const r = c * minDim;
-      ctx.strokeStyle = 'rgba(59, 139, 212, 0.92)';
-      ctx.fillStyle = 'rgba(59, 139, 212, 0.12)';
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = 'rgba(59, 139, 212, 0.5)';
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * t, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t);
-      ctx.stroke();
-      if (t > 0.85 && shape.label) drawCanvasLabel(ctx, cx, cy - r, shape.label, { alpha: (t - 0.85) / 0.15 });
-      break;
-    }
-    case 'rect': {
-      const fullW = c * W;
-      const fullH = d * H;
-      const cx = (a + c / 2) * W;
-      const cy = (b + d / 2) * H;
-      const w = fullW * t;
-      const h = fullH * t;
-      ctx.strokeStyle = 'rgba(59, 139, 212, 0.92)';
-      ctx.fillStyle = 'rgba(59, 139, 212, 0.15)';
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = 'rgba(59, 139, 212, 0.5)';
-      ctx.beginPath();
-      ctx.roundRect(cx - w / 2, cy - h / 2, w, h, 6);
-      ctx.stroke();
-      ctx.fill();
-      break;
-    }
-    case 'highlight': {
-      const fullW = c * W;
-      const fullH = d * H;
-      const cx = (a + c / 2) * W;
-      const cy = (b + d / 2) * H;
-      ctx.fillStyle = `rgba(255, 220, 0, ${0.22 * t})`;
-      ctx.shadowColor = 'rgba(255, 200, 0, 0.3)';
-      ctx.shadowBlur = 6;
-      ctx.fillRect(cx - (fullW * t) / 2, cy - (fullH * t) / 2, fullW * t, fullH * t);
-      break;
-    }
-    case 'underline': {
-      const x1 = a * W;
-      const y1 = b * H;
-      const endX = c * W;
-      const endY = d * H;
-      const x2 = x1 + (endX - x1) * t;
-      const y2 = y1 + (endY - y1) * t;
-      ctx.strokeStyle = 'rgba(59, 139, 212, 0.92)';
-      ctx.lineWidth = 3;
-      ctx.shadowColor = 'rgba(59, 139, 212, 0.5)';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      if (t > 0.85 && shape.label) {
-        drawCanvasLabel(ctx, (x1 + x2) / 2, y1, shape.label, { alpha: (t - 0.85) / 0.15 });
+      drawStrokes(ctx, shapeStrokes(shape, W, H), t, pen);
+      if (labelAlpha && shape.label) {
+        drawCanvasLabel(ctx, a * W, b * H - c * minDim, shape.label, { alpha: labelAlpha });
       }
       break;
     }
+    case 'rect':
+    case 'rightangle':
+      drawStrokes(ctx, shapeStrokes(shape, W, H), t, pen);
+      break;
+    case 'highlight':
+      drawStrokes(ctx, shapeStrokes(shape, W, H), t, {
+        color: MARKER,
+        width: Math.max(14, d * H),
+        taper: false,
+      });
+      break;
+    case 'underline':
     case 'arrow': {
-      const x1 = a * W;
-      const y1 = b * H;
-      const endX = c * W;
-      const endY = d * H;
-      const x2 = x1 + (endX - x1) * t;
-      const y2 = y1 + (endY - y1) * t;
-      const angle = Math.atan2(y2 - y1, x2 - x1);
-      const headLen = 18;
-      const isHypotenuse = /hypot/i.test(shape.label ?? '');
-      ctx.strokeStyle = isHypotenuse ? 'rgba(255, 112, 67, 0.95)' : 'rgba(79, 195, 247, 0.95)';
-      ctx.lineWidth = isHypotenuse ? 3.5 : 2.5;
-      ctx.shadowColor = isHypotenuse ? 'rgba(255, 112, 67, 0.5)' : 'rgba(79, 195, 247, 0.5)';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      if (t > 0.75) {
-        const headT = (t - 0.75) / 0.25;
-        ctx.globalAlpha = alpha * headT;
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(
-          x2 - headLen * Math.cos(angle - Math.PI / 7),
-          y2 - headLen * Math.sin(angle - Math.PI / 7)
-        );
-        ctx.lineTo(
-          x2 - headLen * Math.cos(angle + Math.PI / 7),
-          y2 - headLen * Math.sin(angle + Math.PI / 7)
-        );
-        ctx.closePath();
-        ctx.fillStyle = ctx.strokeStyle as string;
-        ctx.fill();
-      }
-      if (t > 0.85 && shape.label) {
-        drawCanvasLabel(ctx, (x1 + x2) / 2, (y1 + y2) / 2, shape.label, { alpha: (t - 0.85) / 0.15 });
+      const accent = shape.kind === 'arrow' && /hypot/i.test(shape.label ?? '');
+      drawStrokes(ctx, shapeStrokes(shape, W, H), t, accent ? { ...pen, color: INK_ACCENT } : pen);
+      if (labelAlpha && shape.label) {
+        const at = labelOutside(shape, W, H);
+        drawCanvasLabel(ctx, at.x, at.y, shape.label, { alpha: labelAlpha });
       }
       break;
     }
@@ -219,38 +298,64 @@ export function drawShapeOnCanvas(
       const text = shape.label ?? '';
       const equation = /[=²√^+\-*/()]/.test(text);
       const scale = 0.92 + 0.08 * t;
-      ctx.save();
       ctx.translate(a * W, b * H);
       ctx.scale(scale, scale);
       ctx.translate(-a * W, -b * H);
       drawCanvasLabel(ctx, a * W, b * H, text, { equation, alpha: t });
-      ctx.restore();
       break;
     }
-    case 'work': {
-      // Typed on left-to-right as it appears; stays for the rest of the explanation.
-      const text = shape.label ?? '';
-      const shown = text.slice(0, Math.max(1, Math.ceil(text.length * t)));
-      drawWorkLine(ctx, a * W, b * H, shown, minDim);
+    case 'work':
+      // Handwritten left to right as it appears; stays for the rest of the explanation.
+      drawWorkLine(ctx, a * W, b * H, shape.label ?? '', minDim, progress);
       break;
-    }
-    case 'rightangle': {
-      const size = (c ?? 0.02) * minDim * t;
-      const px = a * W;
-      const py = b * H;
-      ctx.strokeStyle = 'rgba(59, 139, 212, 0.95)';
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = 'rgba(59, 139, 212, 0.4)';
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px + size, py);
-      ctx.lineTo(px + size, py + size);
-      ctx.stroke();
-      break;
-    }
   }
 
   ctx.restore();
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Screen area a shape covers, so the explanation card can stay clear of it. */
+export function shapeBounds(ctx: CanvasRenderingContext2D, shape: CanvasDrawShape, W: number, H: number): Rect {
+  const [a, b, c, d] = shape.coords;
+  const minDim = Math.min(W, H);
+  switch (shape.kind) {
+    case 'work': {
+      ctx.save();
+      const box = workBox(ctx, a * W, b * H, shape.label ?? '', minDim);
+      ctx.restore();
+      return { x: box.x, y: box.y, w: box.w, h: box.h };
+    }
+    case 'label': {
+      ctx.save();
+      ctx.font = `700 ${labelFontSize(true)}px ${HAND_FONT}`;
+      const w = ctx.measureText(shape.label ?? '').width + 24;
+      ctx.restore();
+      return { x: a * W - w / 2, y: b * H - 46, w, h: 46 };
+    }
+    case 'circle': {
+      const r = c * minDim * 1.2;
+      return { x: a * W - r, y: b * H - r - (shape.label ? 40 : 0), w: r * 2, h: r * 2 + (shape.label ? 40 : 0) };
+    }
+    case 'rightangle': {
+      const s = Math.max(16, (c ?? 0.02) * minDim);
+      return { x: a * W - s, y: b * H - s, w: s * 2, h: s * 2 };
+    }
+    case 'rect':
+    case 'highlight':
+      return { x: a * W, y: b * H, w: c * W, h: d * H };
+    case 'arrow':
+    case 'underline': {
+      const x = Math.min(a, c) * W;
+      const y = Math.min(b, d) * H;
+      return { x, y, w: Math.abs(c - a) * W, h: Math.abs(d - b) * H };
+    }
+  }
 }
 
 export interface PointerTrailPoint {
@@ -334,6 +439,17 @@ export function getBubbleMaxWidth(viewportW: number): number {
   return Math.min(480, Math.max(260, viewportW * 0.4));
 }
 
+function overlapArea(a: Rect, b: Rect): number {
+  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/**
+ * Place the explanation card where it covers none of the marks, the working
+ * or the pointer: beside the pointer if there is room, else a free corner.
+ * It stays put while its spot is still clear, so it doesn't jump around.
+ */
 export function clampBubbleToViewport(
   bubble: HTMLDivElement,
   pointerX: number,
@@ -341,7 +457,8 @@ export function clampBubbleToViewport(
   viewportW: number,
   viewportH: number,
   userMoved: boolean,
-  dragOffset: { x: number; y: number }
+  dragOffset: { x: number; y: number },
+  obstacles: Rect[] = []
 ) {
   const maxW = getBubbleMaxWidth(viewportW);
   const maxH = viewportH * 0.7;
@@ -350,22 +467,61 @@ export function clampBubbleToViewport(
 
   const bw = Math.min(bubble.offsetWidth || maxW, maxW);
   const bh = Math.min(bubble.offsetHeight || 120, maxH);
+  const M = 16;
+  const clampX = (x: number) => Math.max(M, Math.min(x, viewportW - bw - M));
+  const clampY = (y: number) => Math.max(M, Math.min(y, viewportH - bh - M));
 
   let left: number;
   let top: number;
 
   if (userMoved) {
-    left = pointerX + dragOffset.x;
-    top = pointerY + dragOffset.y;
+    left = clampX(pointerX + dragOffset.x);
+    top = clampY(pointerY + dragOffset.y);
   } else {
+    const pad = 14;
+    const blocked = [
+      ...obstacles.map((o) => ({ x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 })),
+      { x: pointerX - 44, y: pointerY - 80, w: 88, h: 124 }, // pointer and its label
+    ];
+    const cost = (x: number, y: number) =>
+      blocked.reduce((sum, r) => sum + overlapArea({ x, y, w: bw, h: bh }, r), 0);
+
+    const prevLeft = parseFloat(bubble.dataset.left ?? '');
+    const prevTop = parseFloat(bubble.dataset.top ?? '');
     const anchorRight = pointerX > viewportW * 0.55;
-    left = anchorRight ? pointerX - bw - 24 : pointerX + 24;
-    top = pointerY - 48;
+    const candidates: Array<[number, number]> = [
+      [anchorRight ? pointerX - bw - 28 : pointerX + 28, pointerY - 48],
+      [anchorRight ? pointerX + 28 : pointerX - bw - 28, pointerY - 48],
+      [pointerX - bw / 2, pointerY + 56],
+      [pointerX - bw / 2, pointerY - bh - 56],
+      [viewportW - bw - M, M],
+      [viewportW - bw - M, viewportH - bh - M],
+      [M, viewportH - bh - M],
+      [M, M],
+    ];
+
+    let best: [number, number] | null = null;
+    let bestCost = Infinity;
+    if (!isNaN(prevLeft) && !isNaN(prevTop)) {
+      const keep: [number, number] = [clampX(prevLeft), clampY(prevTop)];
+      if (cost(...keep) === 0) best = keep;
+    }
+    if (!best) {
+      for (const [x, y] of candidates) {
+        const spot: [number, number] = [clampX(x), clampY(y)];
+        const c = cost(...spot);
+        if (c < bestCost) {
+          best = spot;
+          bestCost = c;
+          if (c === 0) break;
+        }
+      }
+    }
+    [left, top] = best!;
   }
 
-  left = Math.max(16, Math.min(left, viewportW - bw - 16));
-  top = Math.max(16, Math.min(top, viewportH - bh - 16));
-
+  bubble.dataset.left = String(left);
+  bubble.dataset.top = String(top);
   bubble.style.left = `${left}px`;
   bubble.style.top = `${top}px`;
   bubble.style.right = 'auto';

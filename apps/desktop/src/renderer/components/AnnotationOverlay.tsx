@@ -7,6 +7,8 @@ import {
   mapPointThroughCaptureRegion,
   mapShapeThroughCaptureRegion,
   buildNarrationSteps,
+  figureCenter,
+  placeBesideFigure,
   type CaptureRegion,
   type CanvasDrawShape,
   type StreamEvent,
@@ -19,8 +21,11 @@ import {
   drawShapeOnCanvas,
   drawEnhancedPointer,
   clampBubbleToViewport,
+  shapeBounds,
+  sideMarkGap,
   DRAW_STROKE_MS,
   type PointerTrailPoint,
+  type Rect,
 } from './overlay-canvas';
 import './AnnotationOverlay.css';
 
@@ -29,8 +34,8 @@ const FADE_IN_MS = 200;
 const MAX_QUEUE_DEPTH = 50;
 const CHAR_STREAM_MS = 30;
 const TRAIL_LENGTH = 6;
-/** Opacity of earlier steps' diagram marks, so the current step stands out */
-const FADED_SHAPE_ALPHA = 0.35;
+/** Opacity of earlier steps' diagram marks: the current step stands out, earlier ones stay readable */
+const FADED_SHAPE_ALPHA = 0.6;
 interface QueuedPoint {
   px: number;
   py: number;
@@ -110,6 +115,8 @@ export default function AnnotationOverlay() {
   const lastPointNormRef = useRef<{ x: number; y: number } | null>(null);
   const lastPointLabelRef = useRef('');
   const captureRegionRef = useRef<CaptureRegion | null>(null);
+  /** Middle of the figure being explained (screen-normalized), so marks sit around it */
+  const figureCenterRef = useRef<{ x: number; y: number } | null>(null);
   const [isRegionSelecting, setIsRegionSelecting] = useState(false);
   const firedEventCountRef = useRef(0);
 
@@ -206,7 +213,8 @@ export default function AnnotationOverlay() {
     } else if (event.type === 'draw') {
       const mappedShape = mapShapeThroughCaptureRegion(event.shape, region);
       const snapped = snapShapeToPoint(mappedShape, lastPointNormRef.current) ?? mappedShape;
-      const anchored = stripDuplicateShapeLabel(snapped, lastPointLabelRef.current);
+      const labelled = stripDuplicateShapeLabel(snapped, lastPointLabelRef.current);
+      const anchored = placeBesideFigure(labelled, figureCenterRef.current, W, H, sideMarkGap(Math.min(W, H)));
       shapesRef.current.push({
         id: `shape-${shapeIdRef.current++}`,
         shape: anchored,
@@ -232,6 +240,10 @@ export default function AnnotationOverlay() {
     stream.events = parsed.events;
     stream.charIndex = 0;
     stopCharStream();
+    const center = figureCenter([parsed.events]);
+    figureCenterRef.current = center
+      ? mapPointThroughCaptureRegion(center.x, center.y, captureRegionRef.current)
+      : null;
 
     stream.intervalId = setInterval(() => {
       if (stream.charIndex < stream.visibleText.length) {
@@ -305,11 +317,20 @@ export default function AnnotationOverlay() {
     const steps = buildNarrationSteps(spokenText, overlayText || pointRef.current?.text || '');
     narrationRef.current.steps = steps;
     narrationRef.current.stepIndex = -1;
+    const center = figureCenter(steps.map((step) => step.events));
+    figureCenterRef.current = center ? mapPointThroughCaptureRegion(center.x, center.y, captureRegion ?? null) : null;
 
     if (steps.length === 0) {
       startCharStream(parseStreamTags(overlayText || pointRef.current?.text || ''));
       return;
     }
+  };
+
+  /** Everything drawn on screen, for keeping the explanation card off it. */
+  const shapeObstacles = (W: number, H: number): Rect[] => {
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return [];
+    return shapesRef.current.map((active) => shapeBounds(ctx, active.shape, W, H));
   };
 
   const persistExplanation = useCallback((visible: boolean) => {
@@ -419,7 +440,8 @@ export default function AnnotationOverlay() {
         W,
         H,
         userMoved,
-        drag
+        drag,
+        shapeObstacles(W, H)
       );
     }
 
@@ -637,7 +659,8 @@ export default function AnnotationOverlay() {
       W,
       H,
       userMoved,
-      dragOffset
+      dragOffset,
+      shapeObstacles(W, H)
     );
   }, [displayedText, point, isMinimized, dragOffset]);
 

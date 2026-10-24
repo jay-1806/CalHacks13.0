@@ -171,7 +171,7 @@ function parsePointCoords(content: string): { x: number; y: number } | null {
   return isNaN(x) || isNaN(y) ? null : { x, y };
 }
 
-function shapeCenter(shape: CanvasDrawShape): { x: number; y: number } {
+export function shapeCenter(shape: CanvasDrawShape): { x: number; y: number } {
   const [a, b, c, d] = shape.coords;
   switch (shape.kind) {
     case 'circle':
