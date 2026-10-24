@@ -1,0 +1,14 @@
+packages:
+  - 'packages/*'
+  - 'services/*'
+  - 'apps/*'
+allowBuilds:
+  esbuild: true
+  electron: true
+  koffi: true
+  # Squirrel installer helper pulled in by electron-builder; our Windows target is NSIS
+  electron-winstaller: false
+minimumReleaseAgeExclude:
+  - electron@42.4.1
+overrides:
+  node-abi: 4.39.0
