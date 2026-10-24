@@ -1,25 +1,38 @@
 import { AIProvider } from './ai-provider.js';
-import { Subject, TutorInput, TutorResponse, prepareOverlayText, stripForTts } from '@screentutor/shared';
+import { Subject, TutorInput, TutorResponse, prepareOverlayText, stripForTts, type TutorStreamStep } from '@screentutor/shared';
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { buildUserPrompt, TUTOR_SYSTEM_PROMPT } from '../prompts/tutor-system-prompt.js';
-import { JsonStringFieldStreamer } from './json-field-stream.js';
+import { JsonArrayItemStreamer } from './json-field-stream.js';
+import { oneLine, TutorStepStreamer } from './step-stream.js';
 
 /**
- * Structured-output schema for every tutor turn. Property order matters:
- * `spokenText` is generated first so it can stream to the client early.
+ * Structured-output schema for every tutor turn. Property order matters: the
+ * subject (one word) comes first, then the steps, each a spoken line and its
+ * drawing tags together, so every step is complete — and can be narrated — as
+ * soon as it is written, long before the whole answer is.
  */
 export const TUTOR_OUTPUT_SCHEMA = {
   type: 'object',
   properties: {
-    spokenText: { type: 'string' },
     subject: { type: 'string', enum: [...Subject.options] },
-    visualText: { type: 'string' },
+    steps: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          spoken: { type: 'string' },
+          visual: { type: 'string' },
+        },
+        required: ['spoken', 'visual'],
+        additionalProperties: false,
+      },
+    },
     summary: { type: 'string' },
     concept: { type: 'string' },
     confidence: { type: 'number' },
   },
-  required: ['spokenText', 'subject', 'visualText', 'summary', 'concept', 'confidence'],
+  required: ['subject', 'steps', 'summary', 'concept', 'confidence'],
   additionalProperties: false,
 } as const;
 
@@ -73,7 +86,7 @@ export class ClaudeProvider implements AIProvider {
 
   async analyzeScreenAndQuestion(
     input: TutorInput,
-    onDelta?: (text: string) => void,
+    onStep?: (step: TutorStreamStep) => void,
     systemPromptOverride?: string
   ): Promise<TutorResponse> {
     if (!this.apiKey) {
@@ -99,12 +112,13 @@ export class ClaudeProvider implements AIProvider {
     content.push({ type: 'text', text: promptText });
 
     try {
-      const finalMessage = await this.streamOnce(content, systemPromptOverride, config.CLAUDE_SPEED, onDelta).catch(
+      const finalMessage = await this.streamOnce(content, systemPromptOverride, config.CLAUDE_SPEED, onStep).catch(
         (err) => {
           // Fast mode has its own rate limit; on a 429 retry once at standard speed.
+          // (A 429 is rejected before any output, so no step has been streamed yet.)
           if (config.CLAUDE_SPEED === 'fast' && err instanceof Anthropic.RateLimitError) {
             console.warn('[Tutor] Fast mode rate-limited, retrying at standard speed.');
-            return this.streamOnce(content, systemPromptOverride, 'standard', onDelta);
+            return this.streamOnce(content, systemPromptOverride, 'standard', onStep);
           }
           throw err;
         }
@@ -125,8 +139,11 @@ export class ClaudeProvider implements AIProvider {
 
       const parsed = JSON.parse(textResponse);
 
-      const rawSpoken = parsed.spokenText || '';
-      const rawVisual = parsed.visualText || '';
+      // One line per step, in the same order the steps were streamed.
+      const steps: Array<{ spoken?: unknown; visual?: unknown }> = Array.isArray(parsed.steps) ? parsed.steps : [];
+      delete parsed.steps;
+      const rawSpoken = steps.map((s) => oneLine(s.spoken)).join('\n');
+      const rawVisual = steps.map((s) => oneLine(s.visual)).join('\n');
       const prepared = prepareOverlayText(rawSpoken, rawVisual);
 
       parsed.overlayText = prepared.overlayText;
@@ -169,7 +186,7 @@ export class ClaudeProvider implements AIProvider {
     content: Anthropic.ContentBlockParam[],
     systemPromptOverride: string | undefined,
     speed: 'standard' | 'fast',
-    onDelta?: (text: string) => void
+    onStep?: (step: TutorStreamStep) => void
   ) {
     // Typed loosely: speedOptions adds fields (speed, string `fallbacks`) newer than this SDK's types.
     const params: any = {
@@ -184,9 +201,10 @@ export class ClaudeProvider implements AIProvider {
       ...speedOptions(config.CLAUDE_MODEL, speed, config.CLAUDE_THINKING),
     };
     const stream = this.anthropic.beta.messages.stream(params);
-    if (onDelta) {
-      const spoken = new JsonStringFieldStreamer('spokenText', onDelta);
-      stream.on('text', (textDelta) => spoken.push(textDelta));
+    if (onStep) {
+      const steps = new TutorStepStreamer(onStep);
+      const items = new JsonArrayItemStreamer('steps', (item) => steps.push(item));
+      stream.on('text', (textDelta) => items.push(textDelta));
     }
     return stream.finalMessage();
   }

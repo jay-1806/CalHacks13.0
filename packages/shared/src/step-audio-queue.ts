@@ -30,6 +30,11 @@ export interface StepAudioQueueOptions {
   gapSeconds?: number;
   /** Minimum lead so nothing is scheduled in the past (seconds). */
   leadSeconds?: number;
+  /**
+   * More steps will be added with addStep() while it plays (a streamed answer);
+   * it completes only after close(). Default false: the steps given are all of them.
+   */
+  open?: boolean;
 }
 
 interface StepState {
@@ -43,6 +48,7 @@ export class StepAudioQueue {
   private cursor = 0;
   private nextStart: number;
   private completed = false;
+  private closed: boolean;
   private readonly gap: number;
   private readonly lead: number;
 
@@ -60,6 +66,26 @@ export class StepAudioQueue {
     this.lead = options.leadSeconds ?? 0.05;
     this.steps = silent.map((isSilent) => ({ pending: [], done: isSilent, started: false }));
     this.nextStart = scheduler.now() + this.lead;
+    this.closed = !options.open;
+  }
+
+  /** Append a step to an open queue (its index is the current step count). */
+  addStep(silent: boolean): number {
+    const index = this.steps.length;
+    this.steps.push({ pending: [], done: silent, started: false });
+    // A silent step reached while waiting for it plays straight away.
+    if (silent) this.advance();
+    return index;
+  }
+
+  /** No more steps will be added: the queue completes once these have played. */
+  close(): void {
+    this.closed = true;
+    this.advance();
+  }
+
+  get stepCount(): number {
+    return this.steps.length;
   }
 
   /** Audio samples for step `index` (in arrival order for that step). */
@@ -119,7 +145,7 @@ export class StepAudioQueue {
         for (const samples of buffered) this.play(this.cursor, samples);
       }
     }
-    if (this.cursor >= this.steps.length && !this.completed) {
+    if (this.cursor >= this.steps.length && this.closed && !this.completed) {
       this.completed = true;
       this.events.onComplete(this.nextStart);
     }

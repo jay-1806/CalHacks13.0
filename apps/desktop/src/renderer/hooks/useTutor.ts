@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { TutorResponse, isWindowTitleDenied, getDenyReason } from '@screentutor/shared';
+import { useState, useCallback, useRef } from 'react';
+import { TutorResponse, isWindowTitleDenied, getDenyReason, parseFirstPointTag, type TutorStreamStep } from '@screentutor/shared';
 import { askTutor } from '../api/client';
 import { ttsProvider } from '../api/tts';
 import * as Sentry from '@sentry/react';
@@ -9,7 +9,14 @@ import { performanceTracker } from '../sentry';
 export const PRIVACY_BLOCKED_MESSAGE =
   'Screen analysis was blocked for privacy. This window contains sensitive content.';
 
-export function useTutor() {
+export interface UseTutorOptions {
+  /** Each finished step of the answer, as soon as it is written (not for cached answers) */
+  onStreamStep?: (step: TutorStreamStep) => void;
+}
+
+export function useTutor(options: UseTutorOptions = {}) {
+  const onStreamStepRef = useRef(options.onStreamStep);
+  onStreamStepRef.current = options.onStreamStep;
   const [response, setResponse] = useState<TutorResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -89,6 +96,7 @@ export function useTutor() {
       let buffer = '';
       let res: TutorResponse | null = null;
       let gotFirstToken = false;
+      let streamedSteps = 0;
 
       const timeoutTimer = setTimeout(() => {
         if (!gotFirstToken) {
@@ -97,7 +105,7 @@ export function useTutor() {
           setIsLoading(false);
           setIsStreaming(false);
         }
-      }, 10000);
+      }, 25000);
 
       try {
         if (reader) {
@@ -116,9 +124,21 @@ export function useTutor() {
               const dataStr = trimmed.substring(6);
               try {
                 const parsedData = JSON.parse(dataStr);
-                 if (parsedData.type === 'delta') {
-                   gotFirstToken = true;
-                   // Keep partial stream off UI until the final response is ready.
+                if (parsedData.type === 'step') {
+                  gotFirstToken = true;
+                  const step = parsedData as TutorStreamStep & { type: string };
+                  if (streamedSteps === 0) {
+                    // Show the overlay on step 1's target now, before the rest is written.
+                    const first = parseFirstPointTag(step.overlay);
+                    window.electronAPI.flyToPoint(
+                      first.x ?? 0.5,
+                      first.y ?? 0.5,
+                      screenMetadata?.screenNumber,
+                      step.overlay
+                    );
+                  }
+                  streamedSteps++;
+                  onStreamStepRef.current?.({ index: step.index, spoken: step.spoken, overlay: step.overlay });
                 } else if (parsedData.type === 'done') {
                   gotFirstToken = true;
                   res = JSON.parse(parsedData.fullText) as TutorResponse;
@@ -127,7 +147,10 @@ export function useTutor() {
                     window.electronAPI.sendDrawings(res.drawings);
                   }
 
-                  if (res.pointTarget) {
+                  if (streamedSteps > 0) {
+                    // Already on screen and being narrated: just keep the full text.
+                    window.electronAPI.updateOverlayText(res.overlayText || res.visualText || '');
+                  } else if (res.pointTarget) {
                     const targetX = res.pointTarget.x !== null ? res.pointTarget.x : 0.5;
                     const targetY = res.pointTarget.y !== null ? res.pointTarget.y : 0.5;
                     window.electronAPI.flyToPoint(

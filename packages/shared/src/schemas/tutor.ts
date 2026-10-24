@@ -146,3 +146,14 @@ export const TutorResponse = z.object({
   timestamp: z.string().optional(),
 });
 export type TutorResponse = z.infer<typeof TutorResponse>;
+
+/**
+ * One finished teaching step, sent to the app as soon as Claude has written it so
+ * the voice can start while the rest of the answer is still being generated.
+ * `overlay` is that step's line of the final overlayText (tags already resolved).
+ */
+export interface TutorStreamStep {
+  index: number;
+  spoken: string;
+  overlay: string;
+}

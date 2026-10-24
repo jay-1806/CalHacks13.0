@@ -14,8 +14,9 @@ export const tutorRoutes: FastifyPluginAsync = async (fastify) => {
         'Access-Control-Allow-Origin': '*'
       });
 
-      const response = await orchestrator.handleQuestion(input, (delta: string) => {
-        reply.raw.write(`data: ${JSON.stringify({ type: 'delta', text: delta })}\n\n`);
+      // Each step goes out the moment it is written, so the app can start narrating.
+      const response = await orchestrator.handleQuestion(input, (step) => {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'step', ...step })}\n\n`);
       });
 
       reply.raw.write(`data: ${JSON.stringify({ type: 'done', fullText: JSON.stringify(response) })}\n\n`);

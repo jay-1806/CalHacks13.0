@@ -1,10 +1,11 @@
-import type { TutorInput, TutorResponse } from '@screentutor/shared';
+import type { TutorInput, TutorResponse, TutorStreamStep } from '@screentutor/shared';
 
 export interface AIProvider {
   readonly name: string;
   analyzeScreenAndQuestion(
     input: TutorInput,
-    onDelta?: (text: string) => void,
+    /** Called with each finished step while the rest of the answer is still being written */
+    onStep?: (step: TutorStreamStep) => void,
     systemPromptOverride?: string
   ): Promise<TutorResponse>;
 }

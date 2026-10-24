@@ -97,8 +97,8 @@ describe('subject packs', () => {
     expect(chess).toContain('Set "subject" to "chess"');
   });
 
-  it('asks Claude for the subject without delaying the spoken text', () => {
-    expect(Object.keys(TUTOR_OUTPUT_SCHEMA.properties)[0]).toBe('spokenText');
+  it('asks Claude for the subject (first, so the right pack shapes every step)', () => {
+    expect(Object.keys(TUTOR_OUTPUT_SCHEMA.properties)[0]).toBe('subject');
     expect(TUTOR_OUTPUT_SCHEMA.properties.subject.enum).toEqual([...Subject.options]);
     expect(TUTOR_OUTPUT_SCHEMA.required).toContain('subject');
   });

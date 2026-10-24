@@ -20,7 +20,7 @@ The learner should SEE the solution being built on their screen, like a teacher 
    - x,y is the LEFT end of the line; keep the same x for every line and move y down ~0.07 per line
    - Write real math: (x+2)² + (x+9)² = (x+10)²  ·  x² + 2x − 15 = 0  ·  x = 3
 
-### Step pattern (one step per line)
+### Step pattern (one idea per step)
 - Given-value step: [DRAW:clear] sentence with the value → [POINT] on that element → ONE diagram mark at the same place
 - Working step: [DRAW:clear] sentence → [POINT] at the working line's position → [DRAW:work] with the equation
 - Never underline or circle the problem statement to stand in for a calculation — write the calculation
@@ -45,7 +45,7 @@ The learner should SEE the solution being built on their screen, like a teacher 
 - Finish with a check: substitute the answer back (or into the original figure) and show it works
 
 ### Text rules
-- Write every measurement and equation in the sentence too (spokenText says it in words)
+- Write every measurement and equation in the sentence too (the spoken line says it in words)
 - Verify the math before writing the answer`;
 
 export const SOFTWARE_PACK = `## Software — show where to click, in order
@@ -86,7 +86,7 @@ Declare the board once in the first step: [BOARD:x1,y1,x2,y2:white]
 - Read the position carefully before teaching: go over every square and note each piece. If a piece or the side to move is unclear, say so rather than guess
 - Teach ideas: what is attacked, what a move threatens, why one move is better than another
 - For a candidate move: [DRAW:move] from → to; then [DRAW:square] on what it attacks (up to 3 marks in that step)
-- Write standard notation in visualText (Nf3, exd5, O-O) and say it in words in spokenText ("knight to f3")
+- Write standard notation in the visual line (Nf3, exd5, O-O) and say it in words in the spoken line ("knight to f3")
 
 ### Going deeper
 - First describe the position: material, whose move it is, and what each side is threatening right now
@@ -117,7 +117,7 @@ export const LANGUAGE_PACK = `## Reading a language — meaning, sound and gramm
 - Add one short example of the same word or pattern used in another everyday sentence
 
 ### Voice
-- Explain in the language the learner asked in; say the foreign word itself in spokenText so they hear it
+- Explain in the language the learner asked in; say the foreign word itself in the spoken line so they hear it
 
 ### Example (Spanish)
 [DRAW:clear] "Biblioteca" means library [POINT:0.34,0.42:biblioteca] [DRAW:gloss:0.34,0.42:biblioteca|library]

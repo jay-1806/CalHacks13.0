@@ -22,8 +22,11 @@ describe('ClaudeProvider request helpers', () => {
     expect(parseDataUrl(undefined)).toBeNull();
   });
 
-  it('asks for spokenText first so it can stream before the rest of the answer', () => {
-    expect(Object.keys(TUTOR_OUTPUT_SCHEMA.properties)[0]).toBe('spokenText');
+  it('asks for the steps right after the one-word subject, each step complete on its own', () => {
+    // Steps stream to the app one by one, so they come before the summary fields,
+    // and each holds its spoken line and its drawing tags together.
+    expect(Object.keys(TUTOR_OUTPUT_SCHEMA.properties).slice(0, 2)).toEqual(['subject', 'steps']);
+    expect(Object.keys(TUTOR_OUTPUT_SCHEMA.properties.steps.items.properties)).toEqual(['spoken', 'visual']);
     expect(TUTOR_OUTPUT_SCHEMA.additionalProperties).toBe(false);
   });
 });

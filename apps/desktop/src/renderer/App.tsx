@@ -9,6 +9,7 @@ import {
   buildNarrationSteps,
   canOpenGettingStartedFromHelp,
   estimateStepDurationMs,
+  type TutorStreamStep,
   nextStatusAfterDismiss,
   nextStatusAfterGetStarted,
   shouldAutoShowOnboarding,
@@ -17,7 +18,7 @@ import {
   type OnboardingStatus,
 } from '@screentutor/shared';
 import { transcriptionProvider } from './api/transcription';
-import { playSilently, ttsProvider, type NarrationHandlers } from './api/tts';
+import { startSilentNarration, ttsProvider, type StepNarration } from './api/tts';
 import { performanceTracker } from './sentry';
 import { PANEL_WIDTH, PANEL_HEIGHT, COLLAPSED_SIZE, MENU_WINDOW_SIZE } from './panelLayout';
 import type { StoredExplanation } from './types/explanation';
@@ -30,6 +31,13 @@ import {
 } from './onboardingStorage';
 
 type BuddyState = 'idle' | 'listening' | 'thinking' | 'responding' | 'pointing' | 'error' | 'privacy';
+
+/** A narration in progress; `ended` once no more steps will be appended. */
+interface LiveNarration {
+  steps: string[];
+  voice: StepNarration;
+  ended: boolean;
+}
 
 /** How long the panel takes to shrink back into the launcher (matches .panel-motion.is-closing) */
 const PANEL_EXIT_MS = 200;
@@ -68,7 +76,11 @@ export default function App() {
     useScreenCapture();
   const screenshotForQuestionRef = useRef(screenshotForQuestion);
   screenshotForQuestionRef.current = screenshotForQuestion;
-  const { askQuestion, response, isLoading, isStreaming, isResponseReady, error, clearResponse } = useTutor();
+  /** Set below to handleStreamStep; passed to useTutor before that function exists. */
+  const streamStepRef = useRef<(step: TutorStreamStep) => void>(() => {});
+  const { askQuestion, response, isLoading, isStreaming, isResponseReady, error, clearResponse } = useTutor({
+    onStreamStep: (step) => streamStepRef.current(step),
+  });
   const {
     turns: chatTurns,
     activeTurnId,
@@ -97,6 +109,10 @@ export default function App() {
   const visibleExplanationTurnIdRef = useRef<string | null>(null);
   /** Cancels a muted (timer-paced) narration, if one is running. */
   const silentNarrationRef = useRef<(() => void) | null>(null);
+  /** The narration playing now: its steps so far and the voice (or silent pacing) playing them */
+  const liveNarrationRef = useRef<LiveNarration | null>(null);
+  /** This answer arrived as streamed steps (so it must not be narrated again when complete) */
+  const answerStreamedRef = useRef(false);
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
   /** The chat was tucked away while an answer is explained, and comes back when it ends. */
@@ -672,20 +688,96 @@ export default function App() {
   const stopNarration = () => {
     silentNarrationRef.current?.();
     silentNarrationRef.current = null;
+    liveNarrationRef.current = null;
+    answerStreamedRef.current = false;
     ttsProvider.stop();
   };
 
   const finishSyncedNarration = (spoken: string) => {
     silentNarrationRef.current = null;
+    liveNarrationRef.current = null;
     window.electronAPI.finishOverlayNarration();
     setRevealedSpokenText(spoken);
     restorePanelAfterAnswer();
   };
 
-  // One clock for everything: the voice. Each step's pointer, drawings and chat
-  // text appear when that step actually starts being heard, so they can't drift.
+  /**
+   * One clock for everything: the voice. Starts a narration whose steps can keep
+   * arriving (a streamed answer); each step's pointer, drawings and chat text
+   * appear when that step actually starts being heard, so they can't drift.
+   * The overlay gets `overlayText` now (step 1, or a whole cached answer).
+   */
+  const beginNarration = (spokenText: string, overlayText: string): LiveNarration => {
+    stopNarration();
+    setRevealedSpokenText('');
+    window.electronAPI.startOverlayNarration({
+      spokenText,
+      overlayText,
+      captureRegion: screenshotRef.current?.captureRegion ?? null,
+    });
+
+    const steps: string[] = [];
+    const live: LiveNarration = { steps, ended: false, voice: null as unknown as StepNarration };
+    const onStep = (index: number) => {
+      window.electronAPI.overlayNarrationStep(index);
+      setRevealedSpokenText(steps.slice(0, index + 1).filter(Boolean).join('\n'));
+    };
+    const onEnd = () => {
+      if (liveNarrationRef.current !== live) return;
+      finishSyncedNarration(steps.filter(Boolean).join('\n'));
+    };
+
+    if (isMutedRef.current) {
+      const silent = startSilentNarration(estimateStepDurationMs, { onStep, onEnd });
+      silentNarrationRef.current = silent.cancel;
+      live.voice = silent;
+    } else {
+      live.voice = ttsProvider.startSteps({
+        onStart: () => setIsSpeaking(true),
+        onStep,
+        onEnd: () => {
+          onEnd();
+          setIsSpeaking(false);
+        },
+      });
+    }
+    liveNarrationRef.current = live;
+    return live;
+  };
+
+  const narrateStep = (live: LiveNarration, spoken: string) => {
+    live.steps.push(spoken);
+    live.voice.append(spoken);
+  };
+
+  /** A step of the answer, as soon as Claude has written it: narrate it now. */
+  const handleStreamStep = (step: TutorStreamStep) => {
+    const live = liveNarrationRef.current;
+    if (step.index === 0) {
+      narrateStep(beginNarration(step.spoken, step.overlay), step.spoken);
+      answerStreamedRef.current = true;
+    } else if (live && !live.ended) {
+      window.electronAPI.appendOverlayNarrationStep({ spoken: step.spoken, overlay: step.overlay });
+      narrateStep(live, step.spoken);
+    }
+    // Otherwise the narration was stopped (muted, a new question): drop the step.
+  };
+  streamStepRef.current = handleStreamStep;
+
+  // The answer is complete. A streamed one is already playing: no more steps are
+  // coming. A cached one arrives whole: narrate all of it now.
   useEffect(() => {
     if (!response || isStreaming || !isResponseReady) return;
+
+    const live = liveNarrationRef.current;
+    if (answerStreamedRef.current) {
+      // Still playing: no more steps are coming. (Stopped early, e.g. muted: leave it.)
+      if (live && !live.ended) {
+        live.ended = true;
+        live.voice.end();
+      }
+      return;
+    }
 
     const spoken = response.spokenText || response.spokenExplanation || '';
     const overlayText = response.overlayText || response.visualText || '';
@@ -693,46 +785,19 @@ export default function App() {
       restorePanelAfterAnswer();
       return;
     }
-
-    const steps = buildNarrationSteps(spoken, overlayText).map((step) => step.spoken);
-    setRevealedSpokenText('');
-    window.electronAPI.startOverlayNarration({
-      spokenText: spoken,
-      overlayText,
-      captureRegion: screenshotRef.current?.captureRegion ?? null,
-    });
-
-    const onStep = (index: number) => {
-      window.electronAPI.overlayNarrationStep(index);
-      setRevealedSpokenText(steps.slice(0, index + 1).filter(Boolean).join('\n'));
-    };
-
-    if (isMutedRef.current) {
-      silentNarrationRef.current = playSilently(steps, estimateStepDurationMs, {
-        onStep,
-        onEnd: () => finishSyncedNarration(spoken),
-      });
-    } else {
-      const handlers: NarrationHandlers = {
-        onStart: () => setIsSpeaking(true),
-        onStep,
-        onEnd: () => {
-          finishSyncedNarration(spoken);
-          setIsSpeaking(false);
-        },
-      };
-      ttsProvider.speakSteps(steps, handlers);
-    }
-
-    return () => stopNarration();
+    const whole = beginNarration(spoken, overlayText);
+    buildNarrationSteps(spoken, overlayText).forEach((step) => narrateStep(whole, step.spoken));
+    whole.ended = true;
+    whole.voice.end();
   }, [response, isStreaming, isResponseReady]);
 
   // Muting mid-answer stops the voice and shows the rest of the explanation at once.
   useEffect(() => {
     if (!isMuted || !ttsProvider.isSpeaking()) return;
+    const heard = liveNarrationRef.current?.steps.filter(Boolean).join('\n');
     ttsProvider.stop();
     setIsSpeaking(false);
-    finishSyncedNarration(response?.spokenText || response?.spokenExplanation || '');
+    finishSyncedNarration(heard || response?.spokenText || response?.spokenExplanation || '');
   }, [isMuted]);
 
   useEffect(() => {

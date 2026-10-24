@@ -14,7 +14,7 @@ export class FakeTutorProvider implements AIProvider {
 
   async analyzeScreenAndQuestion(
     input: TutorInput,
-    _onDelta?: (text: string) => void,
+    _onStep?: (step: import('@screentutor/shared').TutorStreamStep) => void,
     systemPromptOverride?: string
   ): Promise<TutorResponse> {
     this.calls.push(structuredClone(input));

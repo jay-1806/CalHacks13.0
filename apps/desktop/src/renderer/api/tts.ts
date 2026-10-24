@@ -11,7 +11,17 @@ export interface NarrationHandlers {
   onEnd?: () => void;
 }
 
+/** A narration whose steps can keep arriving while earlier ones play (a streamed answer). */
+export interface StepNarration {
+  /** Add the next step's spoken text ('' for a step with nothing to say). */
+  append(text: string): void;
+  /** No more steps: onEnd fires once every appended step has played. */
+  end(): void;
+}
+
 export interface TTSProvider {
+  /** Start a narration; append steps as they become available, then end() it. */
+  startSteps(handlers: NarrationHandlers): StepNarration;
   /** Speak each step in order, reporting the moment each one starts. */
   speakSteps(steps: string[], handlers: NarrationHandlers): void;
   stop(): void;
@@ -24,6 +34,13 @@ function clean(text: string): string {
   return stripStreamTags(text).trim();
 }
 
+/** A whole answer at once: every step appended, then ended. */
+function speakAll(provider: TTSProvider, steps: string[], handlers: NarrationHandlers): void {
+  const narration = provider.startSteps(handlers);
+  steps.forEach((step) => narration.append(step));
+  narration.end();
+}
+
 /**
  * Browser speech synthesis: one utterance per step, so each step's `onstart`
  * event is the exact moment it is heard.
@@ -33,66 +50,79 @@ export class SystemTTSProvider implements TTSProvider {
   private speaking = false;
 
   speakSteps(steps: string[], handlers: NarrationHandlers): void {
+    speakAll(this, steps, handlers);
+  }
+
+  startSteps(handlers: NarrationHandlers): StepNarration {
     this.stop();
     const run = ++this.generation;
+    const live = () => run === this.generation;
     const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
-    if (!synth) {
-      console.warn('System speech synthesis is not supported in this environment.');
-      steps.forEach((_s, i) => handlers.onStep?.(i));
-      handlers.onEnd?.();
-      return;
-    }
+    if (!synth) console.warn('System speech synthesis is not supported in this environment.');
+    const voice = synth?.getVoices().find((v) => v.lang.startsWith('en'));
 
-    const voice = synth.getVoices().find((v) => v.lang.startsWith('en'));
+    let count = 0;
     let started = false;
+    let ended = false;
+    /** Utterances queued and not finished yet */
+    let busy = 0;
+    /** Silent steps waiting for the utterance before them to finish, by that utterance's step */
+    const silentAfter = new Map<number, number[]>();
     let lastSpoken = -1;
-    steps.forEach((text, i) => {
-      if (clean(text)) lastSpoken = i;
-    });
 
-    // Silent steps (no speech) play right after the previous spoken step ends.
-    const flushSilentAfter = (index: number) => {
-      for (let j = index + 1; j < steps.length && !clean(steps[j]); j++) handlers.onStep?.(j);
+    const maybeEnd = () => {
+      if (ended && busy === 0 && live()) {
+        this.speaking = false;
+        handlers.onEnd?.();
+      }
     };
 
-    if (lastSpoken === -1) {
-      steps.forEach((_s, i) => handlers.onStep?.(i));
-      handlers.onEnd?.();
-      return;
-    }
-    // Leading silent steps start immediately.
-    for (let j = 0; j < steps.length && !clean(steps[j]); j++) handlers.onStep?.(j);
-
-    steps.forEach((text, i) => {
-      const spoken = clean(text);
-      if (!spoken) return;
-      const utterance = new SpeechSynthesisUtterance(spoken);
-      if (voice) utterance.voice = voice;
-      utterance.rate = 1.05;
-      utterance.onstart = () => {
-        if (run !== this.generation) return;
-        if (!started) {
-          started = true;
-          this.speaking = true;
-          handlers.onStart?.();
+    return {
+      append: (text) => {
+        if (!live()) return;
+        const i = count++;
+        const spoken = clean(text);
+        if (!spoken || !synth) {
+          // Nothing to say: this step starts when the speech before it ends (or now).
+          if (busy === 0) handlers.onStep?.(i);
+          else silentAfter.set(lastSpoken, [...(silentAfter.get(lastSpoken) ?? []), i]);
+          return;
         }
-        handlers.onStep?.(i);
-      };
-      const finished = () => {
-        if (run !== this.generation) return;
-        flushSilentAfter(i);
-        if (i === lastSpoken) {
-          this.speaking = false;
-          handlers.onEnd?.();
-        }
-      };
-      utterance.onend = finished;
-      utterance.onerror = (e) => {
-        console.error('Speech synthesis utterance error:', e);
-        finished();
-      };
-      synth.speak(utterance);
-    });
+        lastSpoken = i;
+        busy++;
+        const utterance = new SpeechSynthesisUtterance(spoken);
+        if (voice) utterance.voice = voice;
+        utterance.rate = 1.05;
+        utterance.onstart = () => {
+          if (!live()) return;
+          if (!started) {
+            started = true;
+            this.speaking = true;
+            handlers.onStart?.();
+          }
+          handlers.onStep?.(i);
+        };
+        const finished = () => {
+          if (!live()) return;
+          busy--;
+          for (const j of silentAfter.get(i) ?? []) handlers.onStep?.(j);
+          silentAfter.delete(i);
+          maybeEnd();
+        };
+        utterance.onend = finished;
+        utterance.onerror = (e) => {
+          console.error('Speech synthesis utterance error:', e);
+          finished();
+        };
+        // Utterances queue up and play in order, even when added while one is speaking.
+        synth.speak(utterance);
+      },
+      end: () => {
+        if (!live()) return;
+        ended = true;
+        maybeEnd();
+      },
+    };
   }
 
   stop(): void {
@@ -131,6 +161,10 @@ interface CartesiaRun {
   maxInFlight: number;
   socket: WebSocket | null;
   session: { ttsModel: string; voiceId: string } | null;
+  /** end() was called: no more steps will be appended */
+  ended: boolean;
+  /** Set if Cartesia failed before anything played: later steps go to the system voice */
+  fallbackNarration: StepNarration | null;
 }
 
 /** Cartesia plans cap concurrent generations (2 on ours); stay within it. */
@@ -156,27 +190,36 @@ export class CartesiaTTSProvider implements TTSProvider {
   }
 
   speakSteps(steps: string[], handlers: NarrationHandlers): void {
+    speakAll(this, steps, handlers);
+  }
+
+  /**
+   * Start a narration whose steps arrive over time. Each appended step is sent to
+   * Cartesia right away (within the concurrency limit), so its audio is usually
+   * ready before the step before it finishes playing.
+   */
+  startSteps(handlers: NarrationHandlers): StepNarration {
     this.stop();
-    const texts = steps.map(clean);
     const ctx = this.getAudioContext();
     void ctx.resume();
 
-    const runId = crypto.randomUUID();
     const run: CartesiaRun = {
-      id: runId,
-      steps: texts,
+      id: crypto.randomUUID(),
+      steps: [],
       handlers,
       carry: new Map(),
       timers: [],
       started: false,
       endsAt: null,
-      unsent: texts.flatMap((t, i) => (t ? [i] : [])),
+      unsent: [],
       inFlight: new Set(),
       maxInFlight: MAX_IN_FLIGHT,
       socket: null,
       session: null,
+      ended: false,
+      fallbackNarration: null,
       queue: new StepAudioQueue(
-        texts.map((t) => !t),
+        [],
         {
           now: () => ctx.currentTime,
           play: (samples, at) => this.playSamples(samples, at),
@@ -187,12 +230,12 @@ export class CartesiaTTSProvider implements TTSProvider {
             run.endsAt = endsAt;
             this.maybeFinish(run);
           },
-        }
+        },
+        { open: true }
       ),
     };
     this.run = run;
     run.queue.start();
-    if (texts.every((t) => !t)) return;
 
     Promise.all([this.ensureSocket(), getVoiceSession()])
       .then(([socket, session]) => {
@@ -202,6 +245,26 @@ export class CartesiaTTSProvider implements TTSProvider {
         this.sendMore(run);
       })
       .catch((err) => this.fallBack(run, err));
+
+    return {
+      append: (text) => {
+        const spoken = clean(text);
+        if (run.fallbackNarration) return run.fallbackNarration.append(spoken);
+        if (this.run !== run) return;
+        run.steps.push(spoken);
+        const index = run.queue.addStep(!spoken);
+        if (spoken) {
+          run.unsent.push(index);
+          this.sendMore(run);
+        }
+      },
+      end: () => {
+        if (run.fallbackNarration) return run.fallbackNarration.end();
+        if (this.run !== run) return;
+        run.ended = true;
+        run.queue.close();
+      },
+    };
   }
 
   /** Send the next steps in order, keeping within the concurrency limit. */
@@ -233,7 +296,11 @@ export class CartesiaTTSProvider implements TTSProvider {
     if (this.run !== run) return;
     console.warn('Cartesia TTS unavailable, falling back to system voice:', err);
     this.stop();
-    this.fallback.speakSteps(run.steps, run.handlers);
+    // Steps already given go to the system voice now; later ones follow them there.
+    const narration = this.fallback.startSteps(run.handlers);
+    run.steps.forEach((step) => narration.append(step));
+    if (run.ended) narration.end();
+    run.fallbackNarration = narration;
   }
 
   private stepStarted(run: CartesiaRun, index: number): void {
@@ -397,20 +464,27 @@ export class CartesiaTTSProvider implements TTSProvider {
  * No audio (muted): steps advance on a per-step speaking-time estimate, so the
  * pointer and drawings still pace like a narration.
  */
-export function playSilently(
-  steps: string[],
+export function startSilentNarration(
   estimateMs: (spoken: string) => number,
   handlers: NarrationHandlers
-): () => void {
+): StepNarration & { cancel(): void } {
   const timers: ReturnType<typeof setTimeout>[] = [];
-  let elapsed = 0;
+  /** When the next step may start (ms, performance clock) */
+  let nextAt = performance.now();
+  let count = 0;
+  const at = (time: number, fn: () => void) => timers.push(setTimeout(fn, Math.max(0, time - performance.now())));
   handlers.onStart?.();
-  steps.forEach((spoken, index) => {
-    timers.push(setTimeout(() => handlers.onStep?.(index), elapsed));
-    elapsed += estimateMs(spoken);
-  });
-  timers.push(setTimeout(() => handlers.onEnd?.(), elapsed));
-  return () => timers.forEach(clearTimeout);
+  return {
+    append: (spoken) => {
+      const index = count++;
+      // A step that arrives after the previous one's time is up starts as it arrives.
+      const start = Math.max(nextAt, performance.now());
+      at(start, () => handlers.onStep?.(index));
+      nextAt = start + estimateMs(spoken);
+    },
+    end: () => at(Math.max(nextAt, performance.now()), () => handlers.onEnd?.()),
+    cancel: () => timers.forEach(clearTimeout),
+  };
 }
 
 export const ttsProvider = new CartesiaTTSProvider();

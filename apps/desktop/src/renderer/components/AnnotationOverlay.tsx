@@ -478,7 +478,10 @@ export default function AnnotationOverlay() {
   }, []);
 
   useEffect(() => {
-    window.electronAPI.onOverlayDrawings((cmds: DrawingCommand[]) => {
+    // Every listener is removed on cleanup: StrictMode runs this effect twice in development,
+    // and a doubled "append step" listener would add each step twice.
+    const offs: Array<() => void> = [];
+    offs.push(window.electronAPI.onOverlayDrawings((cmds: DrawingCommand[]) => {
       shapesRef.current = cmds
         .map((cmd) => {
           const shape = drawingCommandToShape(cmd);
@@ -487,9 +490,9 @@ export default function AnnotationOverlay() {
         })
         .filter(Boolean) as ActiveShape[];
       setIsVisible(true);
-    });
+    }));
 
-    window.electronAPI.onOverlayPoint((data: { pointTarget: PointTarget; text: string }) => {
+    offs.push(window.electronAPI.onOverlayPoint((data: { pointTarget: PointTarget; text: string }) => {
       if (!data?.pointTarget || data.pointTarget.x === null || data.pointTarget.y === null) {
         setPoint(null);
         return;
@@ -524,36 +527,55 @@ export default function AnnotationOverlay() {
       setShowFullText(false);
       setDragOffset({ x: 0, y: 0 });
       setIsVisible(true);
-    });
+    }));
 
-    window.electronAPI.onOverlayClear(clearOverlayNow);
+    offs.push(window.electronAPI.onOverlayClear(clearOverlayNow));
 
-    window.electronAPI.onOverlayNarrationStart((data: {
+    offs.push(window.electronAPI.onOverlayNarrationStart((data: {
       spokenText: string;
       overlayText: string;
       captureRegion?: CaptureRegion | null;
     }) => {
       startNarration(data.spokenText, data.overlayText, data.captureRegion);
-    });
+    }));
 
-    window.electronAPI.onOverlayNarrationStep((index: number) => {
+    offs.push(window.electronAPI.onOverlayNarrationStep((index: number) => {
       const steps = narrationRef.current.steps;
       if (index >= 0 && index < steps.length) applyNarrationStep(index, steps);
-    });
+    }));
 
-    window.electronAPI.onOverlayNarrationFinish(() => {
+    // A streamed answer: the next step arrives while earlier ones are being narrated.
+    offs.push(window.electronAPI.onOverlayNarrationAppend(({ spoken, overlay }) => {
+      const narration = narrationRef.current;
+      if (narration.steps.length === 0) return; // no narration running (stopped or finished)
+      // One step per streamed step, even an empty one, so indexes match the voice's.
+      const [step] = buildNarrationSteps(spoken, overlay);
+      narration.steps.push(step ?? { spoken: '', display: '', overlaySegment: '', events: [] });
+      // The figure grows as steps arrive; keep its middle current for placing marks.
+      const center = figureCenter(narration.steps.map((s) => s.events));
+      figureCenterRef.current = center
+        ? mapPointThroughCaptureRegion(center.x, center.y, captureRegionRef.current)
+        : null;
+    }));
+
+    // The finished answer's full text, so "show explanation again" has every step.
+    offs.push(window.electronAPI.onOverlayText((text) => {
+      setPoint((prev) => (prev ? { ...prev, text } : prev));
+    }));
+
+    offs.push(window.electronAPI.onOverlayNarrationFinish(() => {
       finishNarration();
-    });
+    }));
 
-    window.electronAPI.onRegionSelectStart(() => {
+    offs.push(window.electronAPI.onRegionSelectStart(() => {
       setIsRegionSelecting(true);
-    });
+    }));
 
-    window.electronAPI.onRegionSelectCancel(() => {
+    offs.push(window.electronAPI.onRegionSelectCancel(() => {
       setIsRegionSelecting(false);
-    });
+    }));
 
-    window.electronAPI.onRestoreExplanation((data: OverlayExplanationPayload) => {
+    offs.push(window.electronAPI.onRestoreExplanation((data: OverlayExplanationPayload) => {
       if (!data?.pointTarget || data.pointTarget.x === null || data.pointTarget.y === null) return;
       cancelErase();
 
@@ -575,11 +597,12 @@ export default function AnnotationOverlay() {
       setShowFullText(!!data.showFullText);
       setDisplayedText(data.showFullText ? parsed.visibleText : '');
       setIsVisible(true);
-    });
+    }));
 
-    window.electronAPI.onTriggerOverlayError(() => {
+    offs.push(window.electronAPI.onTriggerOverlayError(() => {
       setTriggerError(true);
-    });
+    }));
+    return () => offs.forEach((off) => off());
   }, []);
 
   useEffect(() => {

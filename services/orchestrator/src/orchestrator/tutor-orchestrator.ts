@@ -1,4 +1,4 @@
-import { TutorInput, TutorResponse, SessionTurn, LearnerProfile, RedactionService } from '@screentutor/shared';
+import { TutorInput, TutorResponse, SessionTurn, LearnerProfile, RedactionService, type TutorStreamStep } from '@screentutor/shared';
 import type { AIProvider } from '../providers/ai-provider.js';
 import type { MemoryService } from '../memory/memory-service.js';
 import type { ObservabilityService } from '../observability/observability-service.js';
@@ -34,7 +34,8 @@ export class TutorOrchestrator {
     this.semanticCache = new SemanticCache(memory, config.SEMANTIC_CACHE_ENABLED, similarityIndex);
   }
 
-  async handleQuestion(input: TutorInput, onDelta?: (text: string) => void): Promise<TutorResponse> {
+  /** `onStep` receives each finished step while the answer is still being generated (not for cached answers). */
+  async handleQuestion(input: TutorInput, onStep?: (step: TutorStreamStep) => void): Promise<TutorResponse> {
     return Sentry.startSpan({ name: 'tutor.ask', op: 'http' }, async () => {
       const startTime = Date.now();
       if (input.devOverrideRedaction !== undefined) {
@@ -131,7 +132,7 @@ export class TutorOrchestrator {
           this.observability.addSpan(traceId, 'ClaudeModelCall');
           const aiSpan = Sentry.startInactiveSpan({ name: 'claude-vision', op: 'ai' });
           try {
-            response = await this.aiProvider.analyzeScreenAndQuestion(input, onDelta, buildSubjectPrompt(input.subject));
+            response = await this.aiProvider.analyzeScreenAndQuestion(input, onStep, buildSubjectPrompt(input.subject));
           } catch (err) {
             Sentry.captureException(err);
             throw err;

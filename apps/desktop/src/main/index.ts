@@ -725,6 +725,18 @@ ipcMain.on('overlay-narration-step', (_event, index: number) => {
   }
 });
 
+ipcMain.on('append-overlay-narration-step', (_event, step: { spoken: string; overlay: string }) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send('onOverlayNarrationAppend', step);
+  }
+});
+
+ipcMain.on('update-overlay-text', (_event, text: string) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send('onOverlayText', text);
+  }
+});
+
 ipcMain.on('finish-overlay-narration', () => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.webContents.send('onOverlayNarrationFinish');

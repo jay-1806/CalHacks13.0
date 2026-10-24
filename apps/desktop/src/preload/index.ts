@@ -115,6 +115,17 @@ const electronAPI = {
     captureRegion?: { x: number; y: number; width: number; height: number } | null;
   }) => ipcRenderer.send('start-overlay-narration', payload),
   finishOverlayNarration: () => ipcRenderer.send('finish-overlay-narration'),
+  /** The next step of a narration that is still being written (streamed answer). */
+  appendOverlayNarrationStep: (step: { spoken: string; overlay: string }) =>
+    ipcRenderer.send('append-overlay-narration-step', step),
+  onOverlayNarrationAppend: (callback: (step: { spoken: string; overlay: string }) => void) => {
+    return subscribe('onOverlayNarrationAppend', (_event, step) => callback(step));
+  },
+  /** The finished answer's full overlay text (kept for "show explanation again"). */
+  updateOverlayText: (text: string) => ipcRenderer.send('update-overlay-text', text),
+  onOverlayText: (callback: (text: string) => void) => {
+    return subscribe('onOverlayText', (_event, text) => callback(text));
+  },
   /** Step `index` of the narration started being heard: the overlay shows that step. */
   overlayNarrationStep: (index: number) => ipcRenderer.send('overlay-narration-step', index),
   onOverlayNarrationStep: (callback: (index: number) => void) => {
