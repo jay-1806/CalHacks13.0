@@ -26,7 +26,10 @@ export default function App() {
   });
   const [activeLessonId, setActiveLessonId] = useState<string | undefined>(undefined);
 
-  const { screenshot, captureScreen, clearScreenshot, startRegionSelect, isSelectingRegion } = useScreenCapture();
+  const { screenshot, pendingRegion, screenshotForQuestion, clearScreenshot, startRegionSelect, isSelectingRegion } =
+    useScreenCapture();
+  const screenshotForQuestionRef = useRef(screenshotForQuestion);
+  screenshotForQuestionRef.current = screenshotForQuestion;
   const { askQuestion, response, isLoading, isStreaming, isResponseReady, error, clearResponse } = useTutor();
   const { turns: chatTurns, activeTurnId, startTurn, resetTurns, syncActiveTurn, updateTurnExplanation, setTurnExplanation } = useChatHistory();
   const [isScanning, setIsScanning] = useState(false);
@@ -186,21 +189,18 @@ export default function App() {
         }
         startTurn(transcript.trim());
         setIsScanning(true);
-        let capBase64 = screenshotRef.current?.base64;
-        let capMeta = getScreenMetadata(screenshotRef.current);
+        let capBase64: string | undefined;
+        let capMeta: ReturnType<typeof getScreenMetadata> | undefined;
         if (!activeLessonIdRef.current) {
-          if (!capBase64) {
-            const capData = await captureScreen();
-            setIsScanning(false);
-            if (!capData) {
-              setBuddyState('privacy');
-              return;
-            }
-            capBase64 = capData.base64;
-            capMeta = getScreenMetadata(capData);
-          } else {
-            setIsScanning(false);
+          await clearPreviousAnswer();
+          const capData = await screenshotForQuestionRef.current();
+          setIsScanning(false);
+          if (!capData) {
+            setBuddyState('privacy');
+            return;
           }
+          capBase64 = capData.base64;
+          capMeta = getScreenMetadata(capData);
         } else {
           setIsScanning(false);
         }
@@ -305,6 +305,12 @@ export default function App() {
     });
   }, [isScanning, isLoading, isStreaming, isSpeaking, isResponseReady, responseDelivered, response, error, syncActiveTurn]);
 
+  /** Take the previous answer's drawings off screen so they aren't in the new question's screenshot. */
+  const clearPreviousAnswer = async () => {
+    window.electronAPI.clearOverlay();
+    await new Promise((resolve) => setTimeout(resolve, 120)); // let the cleared overlay reach the screen
+  };
+
   const stopNarration = () => {
     silentNarrationRef.current?.();
     silentNarrationRef.current = null;
@@ -396,25 +402,22 @@ export default function App() {
     setBuddyState('thinking');
     try {
       setIsScanning(true);
-      let capBase64 = screenshot?.base64;
-      let capMeta = getScreenMetadata(screenshot);
+      let capBase64: string | undefined;
+      let capMeta: ReturnType<typeof getScreenMetadata> | undefined;
       if (!activeLessonId) {
-        if (!capBase64) {
-          performanceTracker.startSpan('listening_to_screenshot');
-          const capData = await captureScreen();
-          performanceTracker.endSpan('listening_to_screenshot');
-          setIsScanning(false);
+        await clearPreviousAnswer();
+        performanceTracker.startSpan('listening_to_screenshot');
+        const capData = await screenshotForQuestion();
+        performanceTracker.endSpan('listening_to_screenshot');
+        setIsScanning(false);
 
-          if (!capData) {
-            setBuddyState('privacy');
-            performanceTracker.endSpan('total_interaction_latency');
-            return;
-          }
-          capBase64 = capData.base64;
-          capMeta = getScreenMetadata(capData);
-        } else {
-          setIsScanning(false);
+        if (!capData) {
+          setBuddyState('privacy');
+          performanceTracker.endSpan('total_interaction_latency');
+          return;
         }
+        capBase64 = capData.base64;
+        capMeta = getScreenMetadata(capData);
       } else {
         setIsScanning(false);
       }
@@ -524,7 +527,7 @@ export default function App() {
           activeTurnId={activeTurnId}
           startTurn={startTurn}
           onRestoreExplanation={handleRestoreExplanation}
-          isRegionCapture={!!screenshot?.isRegionCapture}
+          isRegionCapture={!!pendingRegion}
           isSelectingRegion={isSelectingRegion}
           onStartRegionSelect={handleStartRegionSelect}
           onClearRegion={handleClearRegion}
