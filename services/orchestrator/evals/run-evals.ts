@@ -43,6 +43,8 @@ interface Row extends CaseScore {
   got: string | undefined;
   latencyMs: number;
   overlayText?: string;
+  spokenText?: string;
+  awaiting?: string;
   error?: string;
 }
 
@@ -54,6 +56,7 @@ for (const testCase of selected) {
     sessionId: `eval-${testCase.id}-${Date.now()}`,
     question: testCase.question,
     subject: giveSubject ? testCase.subject : undefined,
+    guide: testCase.guide,
     screenshotBase64: `data:image/png;base64,${png}`,
     screenMetadata: { imageWidth: width, imageHeight: height, width, height, coordinateSpace: 'normalized_image' },
   });
@@ -68,6 +71,8 @@ for (const testCase of selected) {
       got: answer.subject,
       latencyMs: Date.now() - started,
       overlayText: answer.overlayText,
+      spokenText: answer.spokenText,
+      awaiting: answer.awaiting,
       ...score,
     };
     rows.push(row);
@@ -76,6 +81,7 @@ for (const testCase of selected) {
         `targets ${score.hit.length}/${testCase.targets.length}` +
         (score.missed.length ? ` (missed: ${score.missed.join(', ')})` : '') +
         (score.keyShown === false ? '  no shortcut shown' : '') +
+        (score.nextCorrect === null ? '' : score.nextCorrect ? `  ${answer.nextAction} ✓` : `  ${answer.nextAction} ✗ (wanted ${testCase.expectNext})`) +
         (score.stepsAligned ? '' : '  steps misaligned') +
         `  ${((Date.now() - started) / 1000).toFixed(1)}s`
     );
@@ -95,6 +101,7 @@ for (const testCase of selected) {
       stepsAligned: false,
       hasDrawings: false,
       keyShown: null,
+      nextCorrect: null,
       aims: [],
     });
   }
@@ -108,6 +115,7 @@ const summary = {
   subjectAccuracy: rows.filter((r) => r.subjectCorrect).length / n,
   targetRecall: rows.reduce((s, r) => s + r.targetRecall, 0) / n,
   stepsAligned: rows.filter((r) => r.stepsAligned).length / n,
+  guidedCorrect: rows.filter((r) => r.nextCorrect !== false).length / n,
   medianLatencyMs: rows.map((r) => r.latencyMs).sort((a, b) => a - b)[Math.floor(rows.length / 2)] ?? 0,
 };
 console.log('\n' + JSON.stringify(summary, null, 2));

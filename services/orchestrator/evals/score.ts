@@ -14,6 +14,10 @@ export interface EvalCase {
   targets: Target[];
   /** The answer should show a keyboard shortcut ([DRAW:key]) */
   expectKey?: boolean;
+  /** A guided lesson in progress: the screenshot is after the learner acted */
+  guide?: { goal: string; step: number; lastInstruction: string };
+  /** 'wait' when the answer should guide one action and wait; 'done' for a whole answer */
+  expectNext?: 'wait' | 'done';
 }
 
 export interface CaseScore {
@@ -26,6 +30,8 @@ export interface CaseScore {
   stepsAligned: boolean;
   hasDrawings: boolean;
   keyShown: boolean | null;
+  /** The answer waited / finished as expected (null when the case doesn't say) */
+  nextCorrect: boolean | null;
   /** Every place the answer aimed at, for debugging misses */
   aims: { x: number; y: number; from: string }[];
 }
@@ -87,7 +93,7 @@ export function targetHit(target: Target, aims: Pt[]): boolean {
 
 export function scoreAnswer(
   testCase: EvalCase,
-  answer: { subject?: string; spokenText: string; overlayText?: string }
+  answer: { subject?: string; spokenText: string; overlayText?: string; nextAction?: string }
 ): CaseScore {
   const overlay = answer.overlayText ?? '';
   const aims = aimPoints(overlay);
@@ -105,6 +111,7 @@ export function scoreAnswer(
     stepsAligned: lines(overlay) === lines(answer.spokenText),
     hasDrawings: kinds.length > 0,
     keyShown: testCase.expectKey ? kinds.includes('key') : null,
+    nextCorrect: testCase.expectNext ? (answer.nextAction ?? 'done') === testCase.expectNext : null,
     aims,
   };
 }

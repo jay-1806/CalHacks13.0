@@ -7,6 +7,8 @@ import { CapturedDisplay, normalizeCaptureRegion, type CaptureRegion } from '@sc
 
 export let capturedDisplays: CapturedDisplay[] = [];
 export let lastCaptureRegion: CaptureRegion | null = null;
+/** Display the last screenshot came from (a guided lesson watches that one) */
+export let lastCaptureDisplayId: string | null = null;
 
 export interface DipRect {
   x: number;
@@ -173,6 +175,7 @@ async function captureScreenInternal(regionDip: DipRect | null): Promise<Capture
       `[Screenshot] display=${targetMeta.screenNumber} image=${size.width}x${size.height} dip=${targetMeta.displayWidth}x${targetMeta.displayHeight} scale=${targetMeta.displayScaleFactor}${captureRegion ? ' (region)' : ''}`
     );
 
+    lastCaptureDisplayId = String(cursorDisplay.id);
     return {
       base64,
       width: size.width,

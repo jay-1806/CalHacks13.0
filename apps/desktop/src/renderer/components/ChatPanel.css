@@ -204,6 +204,57 @@
   background: var(--st-surface);
 }
 
+/* Guided lesson: waiting for the learner, with manual Next / End */
+.guided-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 6px 12px 0;
+  border-radius: 14px;
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--st-text);
+}
+
+.guided-bar-label {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #2f7bff;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.guided-bar-task {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guided-bar-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--st-border);
+  background: transparent;
+  color: var(--st-text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.guided-bar-btn.primary {
+  background: var(--st-text);
+  border-color: var(--st-text);
+  color: var(--st-bg);
+}
+
 /* ── Conversation ───────────────────────────────────────────────────────── */
 
 .chat-content {

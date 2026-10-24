@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { TutorResponse, isWindowTitleDenied, getDenyReason, parseFirstPointTag, type TutorStreamStep } from '@screentutor/shared';
+import { TutorResponse, type TutorInput, isWindowTitleDenied, getDenyReason, parseFirstPointTag, type TutorStreamStep } from '@screentutor/shared';
 import { askTutor } from '../api/client';
 import { ttsProvider } from '../api/tts';
 import * as Sentry from '@sentry/react';
@@ -30,6 +30,8 @@ export function useTutor(options: UseTutorOptions = {}) {
     screenMetadata?: any,
     demoLessonId?: string,
     devOverrideRedaction?: boolean,
+    /** A guided lesson in progress (the learner just acted, or asked mid-lesson) */
+    guide?: TutorInput['guide'],
   ) => {
     setIsLoading(true);
     setIsStreaming(true);
@@ -73,6 +75,7 @@ export function useTutor(options: UseTutorOptions = {}) {
         appMetadata: activeTitle ? { windowTitle: activeTitle } : undefined,
         demoLessonId,
         devOverrideRedaction,
+        guide,
       };
 
       performanceTracker.startSpan('screenshot_to_orchestrator');

@@ -72,6 +72,8 @@ interface Props {
   onClearRegion?: () => void;
   /** Increment to focus the question input (Quicky.AI Text action). */
   focusInputToken?: number;
+  /** A guided lesson is waiting for the learner to do `awaiting` */
+  guided?: { awaiting: string; onNext: () => void; onEnd: () => void } | null;
 }
 
 export default function ChatPanel({
@@ -106,6 +108,7 @@ export default function ChatPanel({
   onStartRegionSelect,
   onClearRegion,
   focusInputToken = 0,
+  guided = null,
 }: Props) {
   const chatThreadRef = useRef<HTMLDivElement>(null);
   const questionInputRef = useRef<HTMLInputElement>(null);
@@ -469,6 +472,18 @@ export default function ChatPanel({
         !showMemory &&
         !showSponsors && (
           <>
+            {guided && (
+              <div className="guided-bar no-drag" role="status">
+                <span className="guided-bar-label">Your turn</span>
+                <span className="guided-bar-task">{guided.awaiting}</span>
+                <button type="button" className="guided-bar-btn primary" onClick={guided.onNext}>
+                  Next step
+                </button>
+                <button type="button" className="guided-bar-btn" onClick={guided.onEnd}>
+                  End lesson
+                </button>
+              </div>
+            )}
             {isRegionCapture && (
               <div className="region-hint no-drag">Area captured</div>
             )}

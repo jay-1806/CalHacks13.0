@@ -75,7 +75,9 @@ declare global {
       overlayText: string;
       captureRegion?: { x: number; y: number; width: number; height: number } | null;
     }) => void;
-    finishOverlayNarration: () => void;
+    finishOverlayNarration: (payload?: { awaiting?: string }) => void;
+    watchScreenChange: () => Promise<'changed' | 'cancelled'>;
+    stopWatchingScreen: () => void;
     appendOverlayNarrationStep: (step: { spoken: string; overlay: string }) => void;
     onOverlayNarrationAppend: (callback: (step: { spoken: string; overlay: string }) => void) => () => void;
     updateOverlayText: (text: string) => void;
@@ -87,7 +89,7 @@ declare global {
       overlayText: string;
       captureRegion?: { x: number; y: number; width: number; height: number } | null;
     }) => void) => () => void;
-    onOverlayNarrationFinish: (callback: () => void) => () => void;
+    onOverlayNarrationFinish: (callback: (payload: { awaiting?: string }) => void) => () => void;
     flyToPoint: (x: number, y: number, screenNumber?: number, text?: string) => void;
     getSentryConfig: () => Promise<{ enabled: boolean; dsn: string }>;
     simulateOverlayError: () => void;

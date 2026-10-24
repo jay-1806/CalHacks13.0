@@ -148,7 +148,7 @@ def draw_tool_icon(d, name, cx, cy):
         d.line([(cx + 4, cy + 4), (cx + 13, cy + 13)], fill=c, width=4)
 
 
-def photo_editor():
+def photo_editor(crop_active=False):
     img = Image.new('RGB', (W, H), '#323232')
     d = ImageDraw.Draw(img)
     ui, ui_b = font('segoeui.ttf', 19), font('segoeuib.ttf', 19)
@@ -168,9 +168,10 @@ def photo_editor():
     # Toolbar
     d.rectangle([0, 76, 58, H], fill='#262626')
     tools = {}
+    active_tool = 'Crop' if crop_active else 'Move'
     for i, name in enumerate(TOOLS):
         cy = 110 + i * 56
-        if name == 'Move':
+        if name == active_tool:
             d.rounded_rectangle([7, cy - 24, 51, cy + 24], radius=6, fill='#474747')
         draw_tool_icon(d, name, 29, cy)
         tools[name] = nbox(4, cy - 26, 54, cy + 26)
@@ -189,6 +190,20 @@ def photo_editor():
         d.line([(px1, yy), (px2, yy)], fill=col)
     d.ellipse([1180, 220, 1290, 330], fill='#fff4c0')
     d.polygon([(560, 860), (640, 700), (700, 860)], fill='#3f6e3a')
+    if crop_active:
+        # The crop box around the whole photo, with its handles, and the crop options bar.
+        d.rectangle([px1, py1, px2, py2], outline='#ffffff', width=2)
+        for hx in (px1, (px1 + px2) // 2, px2):
+            for hy in (py1, (py1 + py2) // 2, py2):
+                if (hx, hy) != ((px1 + px2) // 2, (py1 + py2) // 2):
+                    d.rectangle([hx - 9, hy - 9, hx + 9, hy + 9], fill='#ffffff', outline='#222222')
+        for t in (1, 2):
+            x = px1 + (px2 - px1) * t // 3
+            y = py1 + (py2 - py1) * t // 3
+            d.line([(x, py1), (x, py2)], fill='#ffffff', width=1)
+            d.line([(px1, y), (px2, y)], fill='#ffffff', width=1)
+        d.rectangle([60, 36, 1500, 74], fill='#2b2b2b')
+        d.text((70, 45), 'Ratio  ▾     W x H x Resolution    Clear    Straighten    Delete Cropped Pixels   ✓', fill='#bdbdbd', font=ui)
     # Layers panel
     lx = 1520
     d.rectangle([lx, 76, W, H], fill='#2b2b2b')
@@ -225,6 +240,18 @@ def photo_editor():
             d.rectangle([cx - 8, by - 6, cx + 8, by + 11], outline=c, width=2)
             d.line([(cx - 11, by - 8), (cx + 11, by - 8)], fill=c, width=2)
         icons[name] = nbox(cx - 22, by - 22, cx + 22, by + 22)
+    if crop_active:
+        save(img, 'software-editor-crop-active.png')
+        cases.append({
+            'id': 'software-crop-guided-next',
+            'image': 'software-editor-crop-active.png',
+            'question': 'I did it. What next?',
+            'subject': 'software',
+            'guide': {'goal': 'How do I crop this photo?', 'step': 1, 'lastInstruction': 'Click the Crop tool'},
+            'expectNext': 'wait',
+            'targets': [{'name': 'the crop box or its handles', 'box': nbox(px1 - 30, py1 - 30, px2 + 30, py2 + 30)}],
+        })
+        return
     save(img, 'software-editor.png')
     cases.append({
         'id': 'software-crop',
@@ -251,7 +278,7 @@ POSITION = {  # square → piece (upper case White, lower case Black)
 }
 
 
-def chess(bottom):
+def chess(bottom, position=POSITION, name=None):
     img = Image.new('RGB', (W, H), '#302e2b')
     d = ImageDraw.Draw(img)
     size, x0, y0 = 104, 544, 124  # 832 px board, centered
@@ -276,7 +303,7 @@ def chess(bottom):
         ranks = '87654321' if bottom == 'white' else '12345678'
         d.text((x0 + (i + 1) * size - 6, y0 + 8 * size - 4), files[i], fill='#30302e', font=coord, anchor='rd')
         d.text((x0 + 6, y0 + i * size + 4), ranks[i], fill='#30302e', font=coord, anchor='la')
-    for sq, p in POSITION.items():
+    for sq, p in position.items():
         c, r = cell(sq)
         cx, cy = x0 + c * size + size / 2, y0 + r * size + size / 2 + 4
         white = p.isupper()
@@ -284,8 +311,10 @@ def chess(bottom):
                fill='#ffffff' if white else '#1b1b1b', stroke_width=3 if white else 1,
                stroke_fill='#1b1b1b' if white else '#000000')
     d.text((x0 + 8 * size + 40, y0 + 20), 'White to move', fill='#f0f0f0', font=font('segoeuib.ttf', 34))
-    name = f'chess-fork-{bottom}.png'
+    name = name or f'chess-fork-{bottom}.png'
     save(img, name)
+    if position is not POSITION:
+        return box
     cases.append({
         'id': f'chess-fork-{bottom}-bottom',
         'image': name,
@@ -297,6 +326,41 @@ def chess(bottom):
             {'name': 'king e8 or rook a8 (attacked)', 'anyOf': [box('e8'), box('a8')]},
         ],
         'expectBoard': {'squares': nbox(x0, y0, x0 + 8 * size, y0 + 8 * size), 'bottom': bottom},
+    })
+
+
+def chess_guided():
+    # Guided play: the lesson starts on the fork position, then the learner played
+    # Nc7+ and Black answered Kd7.
+    start_box = chess('white', dict(POSITION), 'chess-fork-white.png')
+    cases.append({
+        'id': 'chess-guided-start',
+        'image': 'chess-fork-white.png',
+        'question': 'Help me play this position, step by step.',
+        'subject': 'chess',
+        'expectNext': 'wait',
+        'targets': [
+            {'name': 'knight on d5', 'box': start_box('d5')},
+            {'name': 'fork square c7', 'box': start_box('c7')},
+        ],
+    })
+    after = dict(POSITION)
+    del after['d5']
+    del after['e8']
+    after['c7'] = 'N'
+    after['d7'] = 'k'
+    box = chess('white', after, 'chess-after-fork.png')
+    cases.append({
+        'id': 'chess-guided-next',
+        'image': 'chess-after-fork.png',
+        'question': 'I played it.',
+        'subject': 'chess',
+        'guide': {'goal': 'Help me play this position, step by step.', 'step': 1, 'lastInstruction': 'Play Nc7+'},
+        'expectNext': 'wait',
+        'targets': [
+            {'name': 'knight on c7', 'box': box('c7')},
+            {'name': 'rook on a8 (Nxa8)', 'box': box('a8')},
+        ],
     })
 
 
@@ -352,10 +416,15 @@ if __name__ == '__main__':
     math_triangle()
     math_integral()
     photo_editor()
+    photo_editor(crop_active=True)
     chess('white')
     chess('black')
+    chess_guided()
     language_spanish()
     language_japanese()
+    # Explanations are answered whole; "how do I" tasks start a guided lesson.
+    for c in cases:
+        c.setdefault('expectNext', 'wait' if c['id'] in ('software-crop', 'software-new-layer') else 'done')
     with open(os.path.join(HERE, 'cases.json'), 'w', encoding='utf8') as fh:
         json.dump({'width': W, 'height': H, 'cases': cases}, fh, ensure_ascii=False, indent=2)
     print(f'{len(cases)} cases written')

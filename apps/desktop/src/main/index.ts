@@ -18,7 +18,9 @@ import {
   lastCaptureRegion,
   getCursorDisplayMeta,
   type CaptureResult,
+  lastCaptureDisplayId,
 } from './screenshot.js';
+import { stopWatchingScreen, watchForScreenChange } from './screen-watch.js';
 import { isWindowDenied, togglePrivacyMode, getPrivacyMode, getActiveWindowTitle } from './privacy.js';
 import { registerHoldDictationShortcuts, unregisterHoldDictationShortcuts } from './shortcuts.js';
 import { isMac } from './platform.js';
@@ -737,9 +739,20 @@ ipcMain.on('update-overlay-text', (_event, text: string) => {
   }
 });
 
-ipcMain.on('finish-overlay-narration', () => {
+// Guided lessons: report when the learner's screen changes and settles.
+ipcMain.handle('watch-screen-change', () =>
+  watchForScreenChange({
+    displayId: lastCaptureDisplayId,
+    // The animated launcher (and the panel, if open) would always look like a change.
+    ignore: () => (mainWindow && !mainWindow.isDestroyed() ? [mainWindow.getBounds()] : []),
+  })
+);
+
+ipcMain.on('stop-watching-screen', () => stopWatchingScreen());
+
+ipcMain.on('finish-overlay-narration', (_event, payload?: { awaiting?: string }) => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.webContents.send('onOverlayNarrationFinish');
+    overlayWindow.webContents.send('onOverlayNarrationFinish', payload ?? {});
   }
 });
 

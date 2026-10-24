@@ -10,6 +10,7 @@ import {
   canOpenGettingStartedFromHelp,
   estimateStepDurationMs,
   type TutorStreamStep,
+  type TutorInput,
   nextStatusAfterDismiss,
   nextStatusAfterGetStarted,
   shouldAutoShowOnboarding,
@@ -31,6 +32,9 @@ import {
 } from './onboardingStorage';
 
 type BuddyState = 'idle' | 'listening' | 'thinking' | 'responding' | 'pointing' | 'error' | 'privacy';
+
+/** Saying one of these during a guided lesson means "I did it, go on". */
+const SAID_DONE = /^\s*(done|next|next step|ok(ay)?|i did( it)?|did it|finished|ready)[.!\s]*$/i;
 
 /** A narration in progress; `ended` once no more steps will be appended. */
 interface LiveNarration {
@@ -113,6 +117,17 @@ export default function App() {
   const liveNarrationRef = useRef<LiveNarration | null>(null);
   /** This answer arrived as streamed steps (so it must not be narrated again when complete) */
   const answerStreamedRef = useRef(false);
+  /** The guided lesson in progress, if the tutor is waiting for the learner to act */
+  const guidedRef = useRef<{ goal: string; step: number; lastInstruction: string } | null>(null);
+  /** What the learner should do now (shown in the chat panel), while their screen is watched */
+  const [guidedAwaiting, setGuidedAwaiting] = useState<string | null>(null);
+  /** Bumped to ignore a screen watch that was superseded */
+  const guidedWatchRef = useRef(0);
+  /** The question that started the current lesson */
+  const lessonGoalRef = useRef('');
+  const continueGuidedRef = useRef<() => Promise<void>>(async () => {});
+  const responseRef = useRef(response);
+  responseRef.current = response;
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
   /** The chat was tucked away while an answer is explained, and comes back when it ends. */
@@ -528,7 +543,11 @@ export default function App() {
     try {
       await transcriptionProvider.stopSession();
       const transcript = await transcriptionProvider.getFinalTranscript(activeLessonIdRef.current);
-      if (transcript && transcript.trim()) {
+      if (transcript && transcript.trim() && guidedRef.current && SAID_DONE.test(transcript)) {
+        // "Done" / "next" during a guided lesson: same as the screen changing.
+        await continueGuidedRef.current();
+      } else if (transcript && transcript.trim()) {
+        const guide = takeGuideForQuestion(transcript.trim());
         startTurn(transcript.trim());
         await hidePanelForAnswer();
         if (!wasHoldDictation) {
@@ -555,7 +574,7 @@ export default function App() {
         }
 
         const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
-        const res = await askQuestion(transcript, capBase64, capMeta, activeLessonIdRef.current, devOverride);
+        const res = await askQuestion(transcript, capBase64, capMeta, activeLessonIdRef.current, devOverride, guide);
         setBuddyState(res ? 'responding' : 'error');
         if (!res) restorePanelAfterAnswer();
       } else {
@@ -696,8 +715,77 @@ export default function App() {
   const finishSyncedNarration = (spoken: string) => {
     silentNarrationRef.current = null;
     liveNarrationRef.current = null;
-    window.electronAPI.finishOverlayNarration();
     setRevealedSpokenText(spoken);
+    const answer = responseRef.current;
+    if (answer?.nextAction === 'wait' && answer.awaiting) {
+      // A guided lesson: the learner acts now. Marks stay up, the chat stays aside.
+      window.electronAPI.finishOverlayNarration({ awaiting: answer.awaiting });
+      waitForLearner(answer.awaiting);
+      return;
+    }
+    clearGuidedLesson();
+    window.electronAPI.finishOverlayNarration();
+    restorePanelAfterAnswer();
+  };
+
+  // ── Guided lessons ────────────────────────────────────────────────────────
+  // The tutor asked the learner to do something (nextAction "wait"). Their screen
+  // is watched; when it changes and settles (or they press Next / say "done"),
+  // a fresh screenshot goes back with the lesson so the tutor can check and continue.
+
+  /** The lesson to send with this question, if one is in progress; records a new goal otherwise. */
+  const takeGuideForQuestion = (question: string): TutorInput['guide'] => {
+    stopWatchingForLearner();
+    const lesson = guidedRef.current;
+    if (!lesson) {
+      lessonGoalRef.current = question;
+      return undefined;
+    }
+    return { goal: lesson.goal, step: lesson.step, lastInstruction: lesson.lastInstruction };
+  };
+
+  const waitForLearner = (awaiting: string) => {
+    const previous = guidedRef.current;
+    guidedRef.current = {
+      goal: previous?.goal ?? lessonGoalRef.current,
+      step: (previous?.step ?? 0) + 1,
+      lastInstruction: awaiting,
+    };
+    setGuidedAwaiting(awaiting);
+    setBuddyState('pointing');
+    const watch = ++guidedWatchRef.current;
+    void window.electronAPI.watchScreenChange().then((result) => {
+      if (result === 'changed' && guidedWatchRef.current === watch && guidedRef.current) {
+        void continueGuidedRef.current();
+      }
+    });
+  };
+
+  const stopWatchingForLearner = () => {
+    guidedWatchRef.current++;
+    window.electronAPI.stopWatchingScreen();
+    setGuidedAwaiting(null);
+  };
+
+  /** The learner did the step (screen changed, Next, or "done"): check it and continue. */
+  const continueGuided = async () => {
+    if (!guidedRef.current) return;
+    const text = 'Done — next step';
+    startTurn(text);
+    await handleAsk("I've done that. Check my screen and guide me on.");
+  };
+  continueGuidedRef.current = continueGuided;
+
+  const clearGuidedLesson = () => {
+    stopWatchingForLearner();
+    guidedRef.current = null;
+  };
+
+  /** End lesson (from the chat panel): stop waiting and clear the screen. */
+  const endGuidedLesson = () => {
+    clearGuidedLesson();
+    window.electronAPI.clearOverlay();
+    setBuddyState('idle');
     restorePanelAfterAnswer();
   };
 
@@ -822,6 +910,8 @@ export default function App() {
   }, [response]);
 
   const handleAsk = async (questionText: string) => {
+    // Mid-lesson questions (and the "I did it" turns) carry the lesson; others start fresh.
+    const guide = takeGuideForQuestion(questionText);
     stopNarration();
     setIsSpeaking(false);
     setRevealedSpokenText('');
@@ -853,7 +943,7 @@ export default function App() {
       }
 
       const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
-      const res = await askQuestion(questionText, capBase64, capMeta, activeLessonId, devOverride);
+      const res = await askQuestion(questionText, capBase64, capMeta, activeLessonId, devOverride, guide);
       setBuddyState(res ? 'responding' : 'error');
       if (!res) restorePanelAfterAnswer();
       performanceTracker.endSpan('total_interaction_latency');
@@ -1001,6 +1091,11 @@ export default function App() {
               onStartRegionSelect={handleStartRegionSelect}
               onClearRegion={handleClearRegion}
               focusInputToken={focusInputToken}
+              guided={
+                guidedAwaiting
+                  ? { awaiting: guidedAwaiting, onNext: () => void continueGuided(), onEnd: endGuidedLesson }
+                  : null
+              }
             />
           )}
         </div>

@@ -114,7 +114,11 @@ const electronAPI = {
     overlayText: string;
     captureRegion?: { x: number; y: number; width: number; height: number } | null;
   }) => ipcRenderer.send('start-overlay-narration', payload),
-  finishOverlayNarration: () => ipcRenderer.send('finish-overlay-narration'),
+  /** The narration ended. With `awaiting`, a guided lesson waits for the learner: keep the marks up. */
+  finishOverlayNarration: (payload?: { awaiting?: string }) => ipcRenderer.send('finish-overlay-narration', payload),
+  /** Resolves 'changed' once the learner's screen has changed and settled (guided lessons). */
+  watchScreenChange: () => ipcRenderer.invoke('watch-screen-change') as Promise<'changed' | 'cancelled'>,
+  stopWatchingScreen: () => ipcRenderer.send('stop-watching-screen'),
   /** The next step of a narration that is still being written (streamed answer). */
   appendOverlayNarrationStep: (step: { spoken: string; overlay: string }) =>
     ipcRenderer.send('append-overlay-narration-step', step),
@@ -138,8 +142,8 @@ const electronAPI = {
   }) => void) => {
     return subscribe('onOverlayNarrationStart', (_event, payload) => callback(payload));
   },
-  onOverlayNarrationFinish: (callback: () => void) => {
-    return subscribe('onOverlayNarrationFinish', () => callback());
+  onOverlayNarrationFinish: (callback: (payload: { awaiting?: string }) => void) => {
+    return subscribe('onOverlayNarrationFinish', (_event, payload) => callback(payload ?? {}));
   },
   flyToPoint: (x: number, y: number, screenNumber?: number, text?: string) => ipcRenderer.send('fly-to-point', x, y, screenNumber, text),
   getSentryConfig: () => ipcRenderer.invoke('get-sentry-config'),

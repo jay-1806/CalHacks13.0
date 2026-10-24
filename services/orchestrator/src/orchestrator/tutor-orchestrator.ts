@@ -109,6 +109,7 @@ export class TutorOrchestrator {
         const canUseSemanticCache =
           config.SEMANTIC_CACHE_ENABLED &&
           !input.privacyMode &&
+          !input.guide && // a guided turn depends on what the learner just did
           !(input.recentTurns && input.recentTurns.length > 0);
         const cacheKey = buildTutorResponseCacheKey(input, screenshotHash, weakConceptNames);
         const similarityHint = buildTutorSimilarityHint(input, screenshotHash, weakConceptNames);

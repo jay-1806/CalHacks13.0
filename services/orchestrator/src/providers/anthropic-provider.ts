@@ -28,11 +28,13 @@ export const TUTOR_OUTPUT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    nextAction: { type: 'string', enum: ['wait', 'done'] },
+    awaiting: { type: 'string' },
     summary: { type: 'string' },
     concept: { type: 'string' },
     confidence: { type: 'number' },
   },
-  required: ['subject', 'steps', 'summary', 'concept', 'confidence'],
+  required: ['subject', 'steps', 'nextAction', 'awaiting', 'summary', 'concept', 'confidence'],
   additionalProperties: false,
 } as const;
 
@@ -99,6 +101,7 @@ export class ClaudeProvider implements AIProvider {
       recentTurns: input.recentTurns,
       screenMetadata: input.screenMetadata,
       appMetadata: input.appMetadata,
+      guide: input.guide,
     });
 
     const content: Anthropic.ContentBlockParam[] = [];
@@ -170,6 +173,9 @@ export class ClaudeProvider implements AIProvider {
       parsed.mode = parsed.mode || input.mode;
       // A subject the request asked for wins over what the model reported.
       parsed.subject = input.subject ?? (Subject.safeParse(parsed.subject).success ? parsed.subject : 'general');
+      // A guided lesson waits for the learner; anything else is complete as written.
+      parsed.nextAction = parsed.nextAction === 'wait' ? 'wait' : 'done';
+      parsed.awaiting = parsed.nextAction === 'wait' ? String(parsed.awaiting || '').trim() : '';
       parsed.provider = 'claude';
       parsed.timestamp = new Date().toISOString();
       parsed.rawModelText = textResponse;

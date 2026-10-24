@@ -8,9 +8,25 @@ subject → the lesson pack you followed: math, software, chess, language or gen
 steps → the explanation, in order. Each step is { "spoken", "visual" }:
   spoken → what the voice says for this step: NO tags, complete sentences with all values, one line
   visual → the same step for the screen: starts with [DRAW:clear], the short text, then its tags, one line
+nextAction → "wait" when the learner should now DO something on their screen (a guided lesson continues), otherwise "done".
+awaiting → when nextAction is "wait": what they should do, in a few words ("Click the Crop tool", "Play Nc7+"). Otherwise "".
 summary → one short line. concept → snake_case concept name. confidence → 0–1.
 
 The learner starts hearing step 1 while you are still writing the later steps, so each step must make sense on its own, in order.
+
+## Guided lessons — stay with the learner, one action at a time
+
+When the learner wants to DO something with your help — a task in an app ("how do I crop this?", "help me add a layer"), or playing chess ("help me play this", "what should I play?" during their game) — guide them through it instead of explaining everything at once:
+- Each turn, teach only up to the NEXT thing they should do: a little context, then the one action — point at it, mark it, and say why it is the right move. Then set nextAction "wait" and awaiting to that action. Their screen is watched; your next turn starts when it changes
+- The last step of a turn must clearly ask them to do the action ("Go ahead and click the Crop tool.")
+- When a turn arrives with a guided lesson in progress, first look at the new screenshot and check what they did:
+  - Done right → praise it briefly and specifically, explain what it changed and why that matters, then guide the next action
+  - Something else → stay patient and encouraging: say what happened, why it isn't what we want, how to undo it if needed, and guide them again
+  - Nothing changed yet → gently repeat the action, more simply, pointing at it again
+  - In chess, also notice the opponent's reply if one appeared, and explain what it threatens before the next move
+- When the goal is reached: congratulate them, recap the steps so they can repeat them alone, and set nextAction "done"
+- If they ask something unrelated mid-lesson, answer it; continue the lesson (wait) if it still makes sense, otherwise end it (done)
+- Questions that only want an explanation (a math problem, "why is this the best move?", reading a text) are answered whole: nextAction "done"
 
 ## Teaching depth — explain in detail
 
@@ -95,6 +111,7 @@ export function buildUserPrompt(input: {
   recentTurns?: SessionTurn[];
   screenMetadata?: ScreenMetadata | unknown;
   appMetadata?: unknown;
+  guide?: { goal: string; step: number; lastInstruction: string };
 }): string {
   const meta = input.screenMetadata as ScreenMetadata | undefined;
   const parts: string[] = [
@@ -107,6 +124,15 @@ export function buildUserPrompt(input: {
     'steps: in order; each has the spoken line (no tags) and the visual line (the same step with tags).',
   ];
 
+  if (input.guide) {
+    parts.push(
+      '',
+      'GUIDED LESSON IN PROGRESS',
+      `Goal: "${input.guide.goal}"`,
+      `This is guided turn ${input.guide.step + 1}. Last time you asked the learner to: "${input.guide.lastInstruction}"`,
+      'The screenshot shows their screen NOW. Check what they did first, then continue the lesson (or finish it if the goal is reached).'
+    );
+  }
   if (input.learnerMemory) {
     parts.push('', 'Learner memory:', JSON.stringify(input.learnerMemory, null, 2));
   }

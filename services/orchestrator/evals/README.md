@@ -20,6 +20,7 @@ and prompts). Results print as a table and are saved to `evals/results/` (ignore
 | target recall | share of targets that a `[POINT]` or a mark landed on |
 | steps aligned | spoken and drawn steps have the same count (voice/drawing sync) |
 | shortcut shown | for cases that expect one, a `[DRAW:key]` was drawn |
+| guided correct | "how do I" tasks and chess play wait for the learner (`nextAction: wait`); explanations finish (`done`) |
 
 Scoring lives in `score.ts` (unit-tested in `src/__tests__/eval-score.test.ts`).
 
@@ -35,10 +36,15 @@ function there, run `python generate.py`, and commit the PNG and `cases.json`.
 | math-integral | math | limits 2 and 4, the shaded region |
 | software-crop | software | the Crop tool (and a shortcut keycap) |
 | software-new-layer | software | the New Layer button or the Layer menu |
+| software-crop-guided-next | software | guided turn 2, after the learner chose the Crop tool: the crop box or its handles |
 | chess-fork-white-bottom | chess | knight d5, fork square c7, the king or rook it attacks |
 | chess-fork-black-bottom | chess | same position, board flipped |
+| chess-guided-start | chess | "help me play this": guides Nc7+ and waits |
+| chess-guided-next | chess | after Nc7+ Kd7: the knight on c7 and Nxa8 |
 | language-spanish | language | the word "cerrada" |
 | language-japanese | language | the word 飲みます |
 
-Baseline (2026-10-24, claude-opus-5-5, subject auto-detected): 8/8 subjects,
-target recall 1.0, steps aligned 8/8, median answer 5.9 s.
+Latest (2026-10-24, claude-opus-5-5, subject auto-detected, detailed teaching,
+guided lessons): 11/11 subjects, target recall 1.0, steps aligned 11/11,
+guided/whole correct 11/11, median full answer 10.5 s (the voice starts after
+the first step, ~3 s).

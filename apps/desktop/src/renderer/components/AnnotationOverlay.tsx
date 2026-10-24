@@ -90,6 +90,9 @@ function drawingCommandToShape(cmd: DrawingCommand): CanvasDrawShape | null {
 export default function AnnotationOverlay() {
   const [point, setPoint] = useState<{ pointTarget: PointTarget; text: string } | null>(null);
   const [triggerError, setTriggerError] = useState(false);
+  /** Guided lesson: what the learner should do now, while their screen is watched */
+  const [turnHint, setTurnHint] = useState<string | null>(null);
+  const waitingSinceRef = useRef<number | null>(null);
   const [displayedText, setDisplayedText] = useState('');
   const [isVisible, setIsVisible] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -285,14 +288,24 @@ export default function AnnotationOverlay() {
     narrationRef.current.stepIndex = stepIndex;
   };
 
-  const finishNarration = () => {
+  /**
+   * The narration ended. In a guided lesson (`awaiting`) the marks stay up and
+   * hold still while the learner acts — the screen is being watched for their
+   * change, so nothing here may move — with a small "your turn" hint.
+   */
+  const finishNarration = (awaiting?: string) => {
     const steps = narrationRef.current.steps;
     if (steps.length === 0) return;
     stopNarration();
 
     setDisplayedText(steps.map((step) => step.display).filter(Boolean).join('\n'));
     applyNarrationStep(steps.length - 1, steps);
-    scheduleErase();
+    if (awaiting) {
+      waitingSinceRef.current = performance.now();
+      setTurnHint(awaiting);
+    } else {
+      scheduleErase();
+    }
   };
 
   /** After an explanation ends, leave it up for a while, then fade it all away. */
@@ -313,6 +326,8 @@ export default function AnnotationOverlay() {
 
   const clearOverlayNow = () => {
     cancelErase();
+    waitingSinceRef.current = null;
+    setTurnHint(null);
     stopCharStream();
     stopNarration();
     narrationStartedRef.current = false;
@@ -432,15 +447,16 @@ export default function AnnotationOverlay() {
     trailRef.current = trailRef.current.filter((pt) => pt.age < TRAIL_LENGTH);
 
     if (!minimized && currentPoint?.pointTarget.x !== null && currentPoint?.pointTarget.y !== null) {
+      // While waiting for the learner the pointer holds still (its pulse frozen).
+      const waitingSince = waitingSinceRef.current;
       drawEnhancedPointer(
         ctx,
         pointerPosRef.current.x,
         pointerPosRef.current.y,
-        timestamp,
+        waitingSince ?? timestamp,
         pointerLabel,
         trailRef.current,
-        arrivalBurstRef.current &&
-          timestamp - arrivalBurstRef.current.startTime < 400
+        !waitingSince && arrivalBurstRef.current && timestamp - arrivalBurstRef.current.startTime < 400
           ? arrivalBurstRef.current
           : null
       );
@@ -499,6 +515,8 @@ export default function AnnotationOverlay() {
       }
 
       cancelErase();
+      waitingSinceRef.current = null;
+      setTurnHint(null);
       stopCharStream();
       stopNarration();
       narrationStartedRef.current = false;
@@ -563,8 +581,8 @@ export default function AnnotationOverlay() {
       setPoint((prev) => (prev ? { ...prev, text } : prev));
     }));
 
-    offs.push(window.electronAPI.onOverlayNarrationFinish(() => {
-      finishNarration();
+    offs.push(window.electronAPI.onOverlayNarrationFinish(({ awaiting }) => {
+      finishNarration(awaiting);
     }));
 
     offs.push(window.electronAPI.onRegionSelectStart(() => {
@@ -681,6 +699,12 @@ export default function AnnotationOverlay() {
         ref={canvasRef}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
       />
+      {turnHint && (
+        <div className="turn-hint" role="status">
+          <span className="turn-hint-label">Your turn</span>
+          {turnHint}
+        </div>
+      )}
     </div>
   );
 }

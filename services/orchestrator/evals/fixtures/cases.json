@@ -47,7 +47,8 @@
           ],
           "tolerance": 0.03
         }
-      ]
+      ],
+      "expectNext": "done"
     },
     {
       "id": "math-integral",
@@ -82,7 +83,8 @@
             0.7685
           ]
         }
-      ]
+      ],
+      "expectNext": "done"
     },
     {
       "id": "software-crop",
@@ -100,7 +102,8 @@
           ]
         }
       ],
-      "expectKey": true
+      "expectKey": true,
+      "expectNext": "wait"
     },
     {
       "id": "software-new-layer",
@@ -123,6 +126,30 @@
               0.1354,
               0.037
             ]
+          ]
+        }
+      ],
+      "expectNext": "wait"
+    },
+    {
+      "id": "software-crop-guided-next",
+      "image": "software-editor-crop-active.png",
+      "question": "I did it. What next?",
+      "subject": "software",
+      "guide": {
+        "goal": "How do I crop this photo?",
+        "step": 1,
+        "lastInstruction": "Click the Crop tool"
+      },
+      "expectNext": "wait",
+      "targets": [
+        {
+          "name": "the crop box or its handles",
+          "box": [
+            0.1406,
+            0.1111,
+            0.7708,
+            0.9352
           ]
         }
       ]
@@ -177,7 +204,8 @@
           0.8852
         ],
         "bottom": "white"
-      }
+      },
+      "expectNext": "done"
     },
     {
       "id": "chess-fork-black-bottom",
@@ -229,7 +257,67 @@
           0.8852
         ],
         "bottom": "black"
-      }
+      },
+      "expectNext": "done"
+    },
+    {
+      "id": "chess-guided-start",
+      "image": "chess-fork-white.png",
+      "question": "Help me play this position, step by step.",
+      "subject": "chess",
+      "expectNext": "wait",
+      "targets": [
+        {
+          "name": "knight on d5",
+          "box": [
+            0.4458,
+            0.4037,
+            0.5,
+            0.5
+          ]
+        },
+        {
+          "name": "fork square c7",
+          "box": [
+            0.3917,
+            0.2111,
+            0.4458,
+            0.3074
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chess-guided-next",
+      "image": "chess-after-fork.png",
+      "question": "I played it.",
+      "subject": "chess",
+      "guide": {
+        "goal": "Help me play this position, step by step.",
+        "step": 1,
+        "lastInstruction": "Play Nc7+"
+      },
+      "expectNext": "wait",
+      "targets": [
+        {
+          "name": "knight on c7",
+          "box": [
+            0.3917,
+            0.2111,
+            0.4458,
+            0.3074
+          ]
+        },
+        {
+          "name": "rook on a8 (Nxa8)",
+          "box": [
+            0.2833,
+            0.1148,
+            0.3375,
+            0.2111
+          ]
+        }
+      ]
     },
     {
       "id": "language-spanish",
@@ -246,7 +334,8 @@
             0.3593
           ]
         }
-      ]
+      ],
+      "expectNext": "done"
     },
     {
       "id": "language-japanese",
@@ -263,7 +352,8 @@
             0.4065
           ]
         }
-      ]
+      ],
+      "expectNext": "done"
     }
   ]
 }

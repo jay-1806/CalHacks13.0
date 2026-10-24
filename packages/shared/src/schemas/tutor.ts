@@ -79,6 +79,20 @@ export const TutorInput = z.object({
   question: z.string().min(1),
   /** Teach this subject; omit to let the tutor decide from the screen */
   subject: Subject.optional(),
+  /**
+   * A guided lesson in progress: the learner was asked to do something and the
+   * screenshot shows the screen after they acted (or they asked something mid-lesson).
+   */
+  guide: z
+    .object({
+      /** What the learner set out to do (the question that started the lesson) */
+      goal: z.string(),
+      /** How many guided turns came before this one */
+      step: z.number().int().min(1),
+      /** What the learner was last asked to do */
+      lastInstruction: z.string(),
+    })
+    .optional(),
   screenshotBase64: z.string().optional(),
   screenMetadata: ScreenMetadata.optional(),
   appMetadata: AppMetadata.optional(),
@@ -111,6 +125,13 @@ export const TutorResponse = z.object({
   mode: TutorMode.optional(),
   /** The subject this answer was taught as */
   subject: Subject.optional(),
+  /**
+   * 'wait': a guided lesson continues — the learner should now do `awaiting`, and
+   * the next turn starts when their screen changes. 'done': nothing to wait for.
+   */
+  nextAction: z.enum(['wait', 'done']).optional(),
+  /** What the learner should do now, in a few words (when nextAction is 'wait') */
+  awaiting: z.string().optional(),
   summary: z.string(),
   spokenExplanation: z.string().optional(), // backward compatibility
   spokenText: z.string(),
