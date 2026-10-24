@@ -20,7 +20,6 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@electron-toolkit/preload": "^3.0.0",
     "@electron-toolkit/utils": "^4.0.0",
     "@types/node": "^22",
     "@types/react": "^19.0.0",
