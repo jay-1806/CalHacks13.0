@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quicky.AI architecture, explained simply</title>
+<style>
+  :root { --ink:#0f172a; --muted:#475569; --line:#e2e8f0; --bg:#f8fafc; --accent:#0891b2; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+  header { padding:48px 24px 24px; max-width:1100px; margin:0 auto; }
+  h1 { font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0 0 12px; }
+  .lead { font-size:19px; color:var(--muted); max-width:760px; margin:0; }
+  main { max-width:1100px; margin:0 auto; padding:0 24px 64px; }
+  section { margin-top:40px; }
+  h2 { font-size:24px; margin:0 0 6px; }
+  p.sub { margin:0 0 16px; color:var(--muted); }
+  .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; counter-reset:s; padding:0; list-style:none; }
+  .steps li { counter-increment:s; background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .steps li::before { content:counter(s); display:inline-grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; font-weight:700; margin-bottom:8px; }
+  .steps b { display:block; margin-bottom:4px; }
+  .frame { background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(15,23,42,.06); }
+  .frame iframe { width:100%; height:78vh; min-height:560px; border:0; display:block; }
+  .frame a { display:block; padding:10px 16px; font-size:14px; border-top:1px solid var(--line); color:var(--accent); text-decoration:none; }
+  .parts { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .parts div { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .parts h3 { margin:0 0 4px; font-size:17px; }
+  .parts code { font-size:13px; background:#f1f5f9; padding:1px 6px; border-radius:6px; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th,td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); font-size:15px; }
+  th { background:#f1f5f9; }
+  footer { max-width:1100px; margin:0 auto; padding:0 24px 40px; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Quicky.AI, explained in two minutes</h1>
+  <p class="lead">Quicky.AI is a desktop AI math tutor. You ask about a problem on your screen, and it explains it out loud while drawing on top of your screen.</p>
+</header>
+<main>
+  <section>
+    <h2>What happens when you ask a question</h2>
+    <p class="sub">The whole journey in four steps.</p>
+    <ol class="steps">
+      <li><b>You ask</b>Hold the hotkey and speak, or type. Quicky checks that the window is not sensitive, then takes a screenshot.</li>
+      <li><b>Quicky thinks</b>A small local server checks privacy, remembers who you are, and looks for a similar answer it already has.</li>
+      <li><b>Claude teaches</b>If there is no cached answer, Claude looks at the screenshot and writes the lesson one step at a time.</li>
+      <li><b>You see and hear it</b>Each step is spoken and drawn on your screen as soon as it arrives. Ask a follow-up any time.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>The big picture</h2>
+    <p class="sub">Boxes are parts of the system. Arrows show who talks to whom. Click a box in the diagram to see the code behind it.</p>
+    <div class="frame">
+      <iframe src="quicky-architecture.html" title="Quicky.AI architecture diagram" loading="lazy"></iframe>
+      <a href="quicky-architecture.html" target="_blank" rel="noopener">Open the architecture diagram full screen</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>One question, step by step</h2>
+    <p class="sub">Time flows from top to bottom. Each arrow is a message between two parts.</p>
+    <div class="frame">
+      <iframe src="quicky-one-turn.html" title="Quicky.AI one tutoring turn sequence diagram" loading="lazy"></iframe>
+      <a href="quicky-one-turn.html" target="_blank" rel="noopener">Open the sequence diagram full screen</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>The three code folders</h2>
+    <div class="parts">
+      <div><h3>Desktop app</h3><p><code>apps/desktop</code><br>What you see: the floating launcher, the tutor panel, the screen capture and the drawing layer. Built with Electron and React.</p></div>
+      <div><h3>Orchestrator</h3><p><code>services/orchestrator</code><br>The brain that runs each turn: privacy, memory, cache, and the call to Claude. A Fastify server on port 4317.</p></div>
+      <div><h3>Shared library</h3><p><code>packages/shared</code><br>Code both sides use: data shapes, the drawing-tag parser, coordinate math, and redaction of private text.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Which outside services are needed?</h2>
+    <table>
+      <tr><th>Service</th><th>What it does</th><th>If it is missing</th></tr>
+      <tr><td>Claude</td><td>Understands the screen and writes the lesson</td><td>The app cannot answer. This one is required.</td></tr>
+      <tr><td>Cartesia</td><td>Speech-to-text and the spoken voice</td><td>System voice and browser speech recognition are used instead</td></tr>
+      <tr><td>Convex</td><td>Remembers your weak topics and past questions</td><td>Memory lasts only while the server runs</td></tr>
+      <tr><td>Moss</td><td>Finds a similar question already answered</td><td>Only exact repeats are reused</td></tr>
+      <tr><td>Elastic</td><td>Stores request traces for debugging</td><td>Tracing is switched off</td></tr>
+    </table>
+  </section>
+</main>
+<footer>
+  Built from <a href="https://github.com/pgala3183/CalHacks13.0/tree/c86b1fb3c3c615daffda83d2f67102f7153737fd">pgala3183/CalHacks13.0</a> at commit c86b1fb, using the Archify diagram tool.
+</footer>
+</body>
+</html>
