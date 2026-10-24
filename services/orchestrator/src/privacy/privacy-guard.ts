@@ -54,7 +54,7 @@ export class PrivacyGuard {
   /**
    * Throws a PrivacyBlockedError if the input should be blocked.
    * Call this at the top of any orchestrator flow that involves screenshots,
-   * model calls, web research, or Co-drive.
+   * model calls.
    */
   assertAllowed(input: TutorInput): void {
     const windowTitle = input.appMetadata?.windowTitle;
@@ -82,20 +82,6 @@ export class PrivacyGuard {
     if (!memoryEnabled) return false;
     if (input.privacyMode) return false;
     return true;
-  }
-
-  /**
-   * Returns true if web research calls are allowed.
-   */
-  isResearchAllowed(input: TutorInput): boolean {
-    return !this.isDenied(input.appMetadata?.windowTitle, input.privacyMode);
-  }
-
-  /**
-   * Returns true if Co-drive action proposals are allowed.
-   */
-  isCoDriveAllowed(input: TutorInput): boolean {
-    return !this.isDenied(input.appMetadata?.windowTitle, input.privacyMode);
   }
 }
 

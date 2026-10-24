@@ -1,13 +1,12 @@
 # Architecture — ScreenTutor AI
 
-ScreenTutor is a pnpm monorepo with four parts:
+ScreenTutor explains and solves math problems on your screen. It is a pnpm monorepo with three parts:
 
 | Part | Path | Language | Role |
 |---|---|---|---|
-| Desktop app | `apps/desktop` | TypeScript, Electron + React | Hotkeys, screen capture, the Buddy window, the transparent drawing overlay, voice in/out, Co-drive execution |
-| Orchestrator | `services/orchestrator` | TypeScript, Fastify | Calls Claude, routes to specialist agents, memory, cache, research, tracing |
-| Shared library | `packages/shared` | TypeScript | Zod schemas, tag parsing, coordinate math, redaction, key-combo mapping |
-| Study-planner agent | `services/fetch-agent` | Python, Fetch.ai uAgents | Question routing and spaced-repetition study plans, registered on Agentverse |
+| Desktop app | `apps/desktop` | TypeScript, Electron + React | Hotkeys, screen capture, the Buddy window, the transparent drawing overlay, voice in/out |
+| Orchestrator | `services/orchestrator` | TypeScript, Fastify | Calls Claude with the math lesson prompt, learner memory, response cache, tracing |
+| Shared library | `packages/shared` | TypeScript | Zod schemas, tag parsing, coordinate math, redaction |
 
 Convex functions for learner memory live in `services/orchestrator/convex`.
 
@@ -18,25 +17,20 @@ graph LR
     subgraph Desktop["Desktop app (Electron, Windows + macOS)"]
         Buddy["Buddy window<br/>React chat + controls"]
         Overlay["Overlay window<br/>transparent, click-through canvas"]
-        Main["Main process<br/>hotkey · capture · permissions · Co-drive input"]
+        Main["Main process<br/>hotkey · capture · permissions"]
         Buddy <-->|IPC| Main
         Overlay <-->|IPC| Main
     end
 
     subgraph Orch["Orchestrator (Fastify :4317)"]
         Route["/api/tutor/ask (SSE)"]
-        Router["Agent router"]
-        Claude["Claude Opus 5.5<br/>structured output"]
+        Claude["Claude Opus 5.5<br/>math lesson prompt · structured output"]
         Mem["Memory service"]
         Cache["Semantic cache"]
-        Research["Research"]
-        CoDrive["Co-drive planner"]
         Obs["Tracing"]
-        Route --> Router --> Claude
+        Route --> Claude
         Route --> Mem
         Route --> Cache
-        Router --> Research
-        Route --> CoDrive
         Route --> Obs
     end
 
@@ -45,9 +39,6 @@ graph LR
     Mem --> Convex[(Convex)]
     Cache --> Convex
     Cache --> Moss["Moss<br/>semantic index"]
-    Research --> Apify["Apify<br/>RAG Web Browser"]
-    Router -->|REST| Agent["Fetch.ai uAgent<br/>(Agentverse)"]
-    CoDrive --> CU["Claude computer use"]
     Obs --> Elastic["Elastic<br/>OTLP traces"]
 ```
 
@@ -66,7 +57,7 @@ sequenceDiagram
     V-->>D: Transcript
     D->>D: Privacy check, capture screen (JPEG, ≤1920 px)
     D->>O: POST /api/tutor/ask
-    O->>O: Privacy guard · load profile + history + a11y tree in parallel · cache lookup
+    O->>O: Privacy guard · load profile + history in parallel · cache lookup
     O->>C: Screenshot + question (cached system prompt, JSON schema, fast mode)
     C-->>O: spokenText + visualText with [POINT]/[DRAW] tags (streamed)
     O-->>D: SSE "done" with the full response
@@ -95,9 +86,12 @@ The Electron main process picks a backend per OS (`apps/desktop/src/main/platfor
 | Feature | Windows | macOS |
 |---|---|---|
 | Hold-to-talk polling | `hold-key-poll.win32.ts` (user32) | `hold-key-poll.darwin.ts` (CoreGraphics) |
-| Co-drive input | `desktop-input.win32.ts` (user32) | `desktop-input.darwin.ts` (CoreGraphics events) |
-| Permissions | none needed | Screen Recording, Accessibility, Microphone (`permissions.ts`) |
-| Shortcuts | Ctrl-based | Ctrl→Cmd translation (`packages/shared/src/key-combo.ts`) |
+| Permissions | none needed | Screen Recording and Microphone (`permissions.ts`) |
+| Hotkey | Ctrl+Shift+E | Cmd+Shift+E |
+
+## Adding a subject later
+
+Every request goes through one lesson prompt today, `MATH_LESSON_PROMPT` in `services/orchestrator/src/prompts/tutor-system-prompt.ts`, appended after the shared base prompt that defines the drawing protocol. A new subject means a new lesson prompt and a way to choose it (the request's `mode` field is the extension point); the capture, drawing, voice, memory and cache layers are subject-independent.
 
 ## Fallbacks
 
@@ -107,11 +101,8 @@ Every external service has a local fallback, so the app still runs when a key is
 |---|---|
 | Convex | In-process memory |
 | Moss | Exact-match cache only |
-| Apify | Canned research result |
-| Fetch.ai agent | Local router and agents (800 ms timeout) |
 | Elastic | No-op tracing |
 | Cartesia | System voice and browser speech recognition |
-| Claude computer use | Mock proposals |
 
 Claude itself is required.
 

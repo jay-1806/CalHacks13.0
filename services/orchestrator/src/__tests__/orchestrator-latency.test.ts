@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TutorOrchestrator } from '../orchestrator/tutor-orchestrator.js';
 import { InMemoryService } from '../memory/in-memory.js';
-import { AgentRouter } from '../agents/agent-router.js';
-import { MockResearchService } from '../integrations/research.js';
-import { MockCoDriveService } from '../integrations/codrive.js';
 import { NoopObservabilityService } from '../observability/observability-service.js';
 import type { AIProvider } from '../providers/ai-provider.js';
 import type { SessionTurn, TutorInput } from '@screentutor/shared';
@@ -69,9 +66,6 @@ function build(memory: InMemoryService) {
   return new TutorOrchestrator(
     aiProvider,
     memory,
-    new AgentRouter(aiProvider, memory, new MockResearchService()),
-    new MockResearchService(),
-    new MockCoDriveService(),
     new NoopObservabilityService()
   );
 }
@@ -113,9 +107,6 @@ describe('TutorOrchestrator latency', () => {
     const orchestrator = new TutorOrchestrator(
       recordingProvider,
       memory,
-      new AgentRouter(recordingProvider, memory, new MockResearchService()),
-      new MockResearchService(),
-      new MockCoDriveService(),
       new NoopObservabilityService()
     );
 

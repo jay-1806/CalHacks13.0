@@ -21,8 +21,6 @@ ScreenTutor AI is a privacy-first tutoring application. Privacy rules are not ju
 - **Screenshot Blocking**: Screen captures return empty dummy values.
 - **Observability Gate**: Observability tracing spans omit window details.
 - **Accessibility Tree Gate**: Spanning the accessibility context tree returns an empty object.
-- **Co-drive (Claude computer use)**: Proposing and performing desktop actions is completely disabled.
-- **Web Research (Apify)**: Web research requests are completely disabled.
 - **Memory Gating**: Profile and session writes are skipped.
 
 ---

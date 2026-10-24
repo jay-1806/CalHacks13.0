@@ -2,11 +2,8 @@ import { z } from 'zod';
 
 export const SponsorName = z.enum([
   'claude',
-  'codrive',
   'convex',
   'moss',
-  'apify',
-  'fetch_agentverse',
   'elastic',
   'sentry',
   'cartesia'

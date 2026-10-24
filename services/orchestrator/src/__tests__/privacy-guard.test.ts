@@ -139,26 +139,6 @@ describe('PrivacyGuard feature gates', () => {
   it('isMemoryWriteAllowed returns true when safe and enabled', () => {
     expect(guard.isMemoryWriteAllowed(makeInput(), true)).toBe(true);
   });
-
-  it('isResearchAllowed returns false in privacy mode', () => {
-    expect(guard.isResearchAllowed(makeInput({ privacyMode: true }))).toBe(false);
-  });
-
-  it('isResearchAllowed returns false for denied window', () => {
-    expect(guard.isResearchAllowed(makeInput({ appMetadata: { windowTitle: 'Checkout' } }))).toBe(false);
-  });
-
-  it('isCoDriveAllowed returns false in privacy mode', () => {
-    expect(guard.isCoDriveAllowed(makeInput({ privacyMode: true }))).toBe(false);
-  });
-
-  it('isCoDriveAllowed returns false for denied window', () => {
-    expect(guard.isCoDriveAllowed(makeInput({ appMetadata: { windowTitle: 'Email Client' } }))).toBe(false);
-  });
-
-  it('isCoDriveAllowed returns true for safe input', () => {
-    expect(guard.isCoDriveAllowed(makeInput())).toBe(true);
-  });
 });
 
 describe('singleton privacyGuard', () => {

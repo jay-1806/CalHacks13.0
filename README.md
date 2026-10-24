@@ -1,6 +1,6 @@
 # ScreenTutor AI
 
-**An AI tutor that sits next to your cursor, looks at your screen only when you ask, explains out loud, and works the problem on your screen like a teacher at a whiteboard.**
+**An AI math tutor that sits next to your cursor, looks at your screen only when you ask, explains out loud, and works the problem on your screen like a teacher at a whiteboard.**
 
 Built at **Cal Hacks 13.0** · Runs on **Windows and macOS** · Electron + React · Claude Opus 5.5
 
@@ -8,25 +8,26 @@ Built at **Cal Hacks 13.0** · Runs on **Windows and macOS** · Electron + React
 
 ## What it does
 
-Hold **Ctrl+Shift+E** (macOS: **Cmd+Shift+E**), ask a question about anything on your screen, and let go.
+Hold **Ctrl+Shift+E** (macOS: **Cmd+Shift+E**), ask about a math problem on your screen, and let go.
 
 - **Explains by voice.** The answer is spoken with Cartesia's streaming voice, and your question is transcribed live while you hold the key.
 - **Draws on your screen.** A transparent overlay points at the parts it's talking about, marks the diagram (arrows along sides, right-angle marks, circles), and writes each line of working, from the setup to the answer, in the blank space beside the problem.
-- **Teaches, not just answers.** Modes for explaining, hints that don't give the answer away, finding the mistake in your work, quick quizzes, review and web research.
-- **Remembers how you're doing.** Weak concepts and session history are stored in Convex, and a Fetch.ai agent builds a spaced-repetition study plan from them.
-- **Co-drive.** Claude computer use proposes the next click or keystroke as a card. Nothing happens on your computer until you approve it.
+- **Works the whole problem.** Every step is explained in words and shown on the diagram, from setting up the equation to checking the answer.
+- **Remembers how you're doing.** The concepts you ask about and your session history are stored in Convex, so follow-up questions keep their context.
 - **Private by default.** The screen is captured only when you ask, sensitive windows (banking, passwords, email…) are blocked, logs are redacted, and screenshots are never stored.
+
+## Scope
+
+ScreenTutor currently focuses on one thing: explaining and solving **math problems** visually. The code is organized so new subjects can be added later as their own lesson prompts (see `MATH_LESSON_PROMPT` in `services/orchestrator/src/prompts/tutor-system-prompt.ts`), on the way to helping people learn anything on the internet interactively.
 
 ## Sponsor technology
 
 | Sponsor | Used for |
 |---|---|
-| **Anthropic** | Claude Opus 5.5 reads the screenshot and writes the explanation and drawing steps; Claude computer use plans Co-drive steps |
+| **Anthropic** | Claude Opus 5.5 reads the screenshot and writes the explanation and drawing steps |
 | **Cartesia** | Sonic text-to-speech and Ink speech-to-text, both streamed over WebSocket |
 | **Convex** | Learner profiles, weak concepts, session history and the response cache |
 | **Moss** | Semantic cache: a reworded question about the same screen gets the earlier answer instantly |
-| **Apify** | Research mode: live web search and page summaries (RAG Web Browser actor) |
-| **Fetch.ai** | A uAgent on Agentverse that routes questions and plans study sessions |
 | **Elastic** | OpenTelemetry traces of every tutoring step, with latencies and quality checks |
 
 Details for each: [docs/sponsor-integrations.md](docs/sponsor-integrations.md).
@@ -40,8 +41,6 @@ graph LR
     Orch --> Claude["Claude Opus 5.5"]
     Orch --> Convex[(Convex)]
     Orch --> Moss[Moss]
-    Orch --> Apify[Apify]
-    Orch --> Agent["Fetch.ai agent"]
     Orch --> Elastic[Elastic]
     Desktop <-->|voice| Cartesia[Cartesia]
     Orch -->|answer + drawing steps| Desktop
@@ -53,13 +52,12 @@ The full picture, including the drawing protocol and the Windows/macOS platform 
 ## Repository layout
 
 ```
-apps/desktop/            Electron app: Buddy window, overlay, hotkeys, capture, voice, Co-drive input
+apps/desktop/            Electron app: Buddy window, overlay, hotkeys, capture, voice
   src/main/              Main process (per-OS backends: *.win32.ts / *.darwin.ts)
   src/renderer/          React UI and the drawing overlay
-services/orchestrator/   Fastify API: Claude, agents, memory, cache, research, tracing
+services/orchestrator/   Fastify API: Claude, memory, cache, tracing
   convex/                Convex schema and functions for learner memory
   src/__tests__/         Test suite (Vitest)
-services/fetch-agent/    Python uAgent for routing and study plans (Fetch.ai)
 packages/shared/         Shared schemas, tag parser, coordinate math, redaction
 docs/                    Architecture, sponsor details, privacy, demo script, team plan
 ```
@@ -72,7 +70,6 @@ docs/                    Architecture, sponsor details, privacy, demo script, te
 
 - **Node.js 22+**
 - **pnpm 11+** (`npm install -g pnpm`)
-- **Python 3.11+** (optional, only for the Fetch.ai agent)
 - An **Anthropic API key** (required). Every other service is optional and falls back to a local version.
 
 ### 1. Install
@@ -103,18 +100,7 @@ npx convex env set SCREENTUTOR_CONVEX_SECRET <same value>
 
 Leave `npx convex dev` running.
 
-### 3. Start the study-planner agent (Fetch.ai, optional)
-
-```bash
-cd services/fetch-agent
-python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt     # macOS: .venv/bin/pip
-FETCH_AGENT_SEED=<your private seed> .venv/Scripts/python agent.py
-```
-
-Set `FETCH_AGENTVERSE_ENABLED=true` in `.env`. See [services/fetch-agent/README.md](services/fetch-agent/README.md) for connecting it to Agentverse.
-
-### 4. Run the app
+### 3. Run the app
 
 From the repo root:
 
@@ -138,16 +124,13 @@ All settings live in `.env`; [.env.example](.env.example) lists every one with c
 
 | Variable | Required | What it does |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | **Yes** | Claude for explanations and Co-drive |
+| `ANTHROPIC_API_KEY` | **Yes** | Claude reads the screenshot and writes the explanation |
 | `CLAUDE_SPEED` | | `fast` (default): Opus fast mode, about 2.5× faster at a higher price; `standard` to save cost |
 | `CLAUDE_MODEL` / `CLAUDE_EFFORT` | | Defaults `claude-opus-5-5` / `low` |
 | `CARTESIA_API_KEY`, `CARTESIA_VOICE_ID` | | Streaming voice in and out (falls back to the system voice) |
 | `CONVEX_URL`, `SCREENTUTOR_CONVEX_SECRET` | | Persistent learner memory (falls back to in-process memory) |
 | `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | | Semantic answer cache |
-| `APIFY_API_TOKEN` | | Live web research |
-| `FETCH_AGENTVERSE_ENABLED`, `FETCH_AGENT_URL` | | Use the Fetch.ai study-planner agent |
 | `ELASTIC_OTLP_ENDPOINT`, `ELASTIC_API_KEY` | | Send traces to Elastic |
-| `ENABLE_SAFE_ACTIONS` | | `true` lets approved Co-drive steps actually click and type (off by default) |
 | `SENTRY_ENABLED`, `SENTRY_DSN` | | Error reporting |
 
 Settings are read at startup, so restart `pnpm dev` after changing `.env`.
@@ -183,7 +166,7 @@ The current team plan, with diagnostics and who owns what, is in [docs/fix-plan.
 
 ## macOS notes
 
-- **Permissions:** Screen Recording (capture), Microphone (voice) and Accessibility (Co-drive) are requested on first use. Their status is logged at startup as `[Permissions] ...`.
+- **Permissions:** Screen Recording (capture) and Microphone (voice) are requested on first use. Their status is logged at startup as `[Permissions] ...`.
 - In `pnpm dev`, permissions belong to the **Electron** binary (or your terminal app), not ScreenTutor. After granting Screen Recording, quit and relaunch; macOS only applies it on restart.
 - **Distributing a `.dmg`:** unsigned builds need right-click → Open the first time; sharing with others needs an Apple Developer ID certificate and notarization.
 
@@ -193,7 +176,6 @@ The current team plan, with diagnostics and who owns what, is in [docs/fix-plan.
 - **Sensitive windows are blocked.** Analysis stops if the active window matches the denylist (passwords, keychain, banking, email, payments…), or when privacy mode is on.
 - **Redaction everywhere.** API keys, passwords, emails, card numbers and URL query strings are scrubbed from logs, traces, error reports and debug views.
 - **Screenshots are never stored.** They're processed in memory; only an MD5 hash is kept with session history.
-- **Co-drive needs your approval** for every single action, and is blocked in privacy mode and on denylisted windows.
 
 More in [docs/privacy-and-safety.md](docs/privacy-and-safety.md).
 
@@ -211,7 +193,7 @@ Electron's binary wasn't downloaded during install. Run `node node_modules/.pnpm
 pnpm refuses packages published less than a day ago. Pin the flagged package to its previous version under `overrides:` in `pnpm-workspace.yaml` (see the existing `node-abi` entry) rather than disabling the check.
 
 **Hotkey not working**
-On macOS, if push-to-talk never starts, set `SCREENTUTOR_HOTKEY_MODE=toggle` in `.env` (press once to start, again to stop); Co-drive clicks need **Accessibility** permission. On Windows, run as Administrator if a fullscreen app intercepts the hotkey.
+On macOS, if push-to-talk never starts, set `SCREENTUTOR_HOTKEY_MODE=toggle` in `.env` (press once to start, again to stop). On Windows, run as Administrator if a fullscreen app intercepts the hotkey.
 
 **Screen capture is black or empty (macOS)**
 Grant **Screen Recording** in System Settings → Privacy & Security, then quit and relaunch the app.

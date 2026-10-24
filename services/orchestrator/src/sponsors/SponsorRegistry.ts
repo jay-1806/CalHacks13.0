@@ -51,17 +51,6 @@ export class SponsorRegistry {
         privacyNotes: 'Sent only on an explicit capture; screenshots are never stored.',
       }),
       entry(
-        'codrive',
-        statusFor(config.CODRIVE_ENABLED, claudeConfigured, 'error'),
-        config.CODRIVE_ENABLED,
-        { ANTHROPIC_API_KEY: config.ANTHROPIC_API_KEY },
-        {
-          productUse: 'Claude computer use proposes the next click / type / key step in Co-drive mode.',
-          dataSent: 'The Co-drive goal and the captured screenshot.',
-          privacyNotes: `Every step needs your approval; desktop control is ${config.ENABLE_SAFE_ACTIONS ? 'on' : 'off (ENABLE_SAFE_ACTIONS=false)'}. Blocked in privacy mode and on denylisted windows.`,
-        }
-      ),
-      entry(
         'convex',
         !config.MEMORY_ENABLED ? 'disabled' : convexConnected ? 'real' : convexConfigured ? 'error' : 'mock',
         config.MEMORY_ENABLED,
@@ -81,22 +70,6 @@ export class SponsorRegistry {
           productUse: 'Semantic cache: reuses an answer when a reworded question is asked about the same screen.',
           dataSent: 'Lower-cased question text plus scope tags (mode, screenshot hash).',
           privacyNotes: 'Matches only within the same screenshot hash; answers themselves stay in Convex.',
-        }
-      ),
-      entry('apify', statusFor(config.APIFY_ENABLED, !!config.APIFY_API_TOKEN), config.APIFY_ENABLED, { APIFY_API_TOKEN: config.APIFY_API_TOKEN }, {
-        productUse: 'Research mode: RAG Web Browser searches and scrapes pages for the concept.',
-        dataSent: 'Concept name and learner level as a search query.',
-        privacyNotes: 'Blocked in privacy mode and on denylisted windows; no screenshot is sent.',
-      }),
-      entry(
-        'fetch_agentverse',
-        config.FETCH_AGENTVERSE_ENABLED ? 'real' : 'mock',
-        config.FETCH_AGENTVERSE_ENABLED,
-        { FETCH_AGENT_URL: config.FETCH_AGENT_URL },
-        {
-          productUse: 'Study-planner uAgent on Agentverse: routes questions and builds spaced-repetition plans.',
-          dataSent: 'Question text, mode, and weak-concept statistics.',
-          privacyNotes: 'Runs locally (services/fetch-agent); local routing is used if it is stopped.',
         }
       ),
       entry(

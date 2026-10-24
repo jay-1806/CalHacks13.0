@@ -1,17 +1,10 @@
 import { buildCoordinateGuide, type ScreenMetadata, type SessionTurn } from '@screentutor/shared';
 
-/** Category-specific additions appended after the base system prompt. */
-export type TutorAgentName =
-  | 'MathTutorAgent'
-  | 'MisconceptionDetectorAgent'
-  | 'QuizGeneratorAgent'
-  | 'LearningPlanAgent'
-  | 'ResourceFinderAgent';
-
-export function getCategoryPromptOverride(category: 'math' | 'code' | 'general'): string {
-  switch (category) {
-    case 'math':
-      return `## Mathematics tutor — annotate the diagram, write the working beside it
+/**
+ * The lesson prompt for math, appended after the base system prompt. It is the
+ * only subject today; a new subject would get its own prompt like this one.
+ */
+export const MATH_LESSON_PROMPT = `## Mathematics tutor — annotate the diagram, write the working beside it
 
 The learner should SEE the solution being built on their screen, like a teacher at a whiteboard.
 
@@ -49,19 +42,6 @@ The learner should SEE the solution being built on their screen, like a teacher 
 - POINT labels are 1–3 word anchors only
 - Use \n between steps
 - Verify the math before writing the answer`;
-
-    case 'code':
-      return `## Programming tutor — one line at a time
-
-Each sentence: name the line/symbol, then [POINT:x,y], optional [DRAW:circle] at same coords.
-Max w/h 0.18 for code blocks.`;
-
-    default:
-      return `## UI guidance — one control at a time
-
-Each sentence names a control, then [POINT:x,y], optional small [DRAW:circle] at same coords.`;
-  }
-}
 
 export const TUTOR_SYSTEM_PROMPT = `You are ScreenTutor — a visual tutor annotating the user's screenshot.
 
@@ -121,40 +101,32 @@ MANDATORY drawing rules:
 export function formatSessionHistoryForPrompt(turns: SessionTurn[]): string {
   return turns
     .map((turn, index) => {
-      const parts = [`${index + 1}. [${turn.mode}]`, `Question: "${turn.question}"`];
+      const parts = [`Question: "${turn.question}"`];
       if (turn.concept) parts.push(`Concept: ${turn.concept}`);
       if (turn.responseSummary) parts.push(`Tutor summary: ${turn.responseSummary}`);
-      return parts.join(' | ');
+      return `${index + 1}. ${parts.join(' | ')}`;
     })
     .join('\n');
 }
 
 export function buildUserPrompt(input: {
   question: string;
-  mode: string;
   learnerMemory?: unknown;
   recentTurns?: SessionTurn[];
   screenMetadata?: ScreenMetadata | unknown;
   appMetadata?: unknown;
-  accessibilityTree?: unknown;
-  researchContext?: unknown;
 }): string {
   const meta = input.screenMetadata as ScreenMetadata | undefined;
   const parts: string[] = [
     buildCoordinateGuide(meta),
     '',
     `Question: "${input.question}"`,
-    `Mode: ${input.mode}`,
     '',
     'Study the screenshot. Teach step-by-step in reading order.',
     'Each step: [DRAW:clear] → the fact → [POINT] on that element → ONE diagram mark there, or a [DRAW:work] line with the calculation in blank space.',
     'spokenText: complete explanation, no tags.',
     'visualText: same steps with tags, one step per line.',
   ];
-
-  if (input.mode === 'hint') {
-    parts.push('Hint mode: guide without giving the final numeric answer.');
-  }
 
   if (input.learnerMemory) {
     parts.push('', 'Learner memory:', JSON.stringify(input.learnerMemory, null, 2));
@@ -170,12 +142,6 @@ export function buildUserPrompt(input: {
   }
   if (input.appMetadata) {
     parts.push('', 'Active app:', JSON.stringify(input.appMetadata, null, 2));
-  }
-  if (input.accessibilityTree) {
-    parts.push('', 'Accessibility tree:', JSON.stringify(input.accessibilityTree, null, 2));
-  }
-  if (input.researchContext) {
-    parts.push('', 'Research context:', JSON.stringify(input.researchContext, null, 2));
   }
 
   return parts.join('\n');

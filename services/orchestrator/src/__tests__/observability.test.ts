@@ -3,27 +3,8 @@ import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import { NoopObservabilityService, OtlpObservabilityService } from '../observability/observability-service.js';
 import { TutorOrchestrator } from '../orchestrator/tutor-orchestrator.js';
 import { InMemoryService } from '../memory/in-memory.js';
-import { AgentRouter } from '../agents/agent-router.js';
-import { MockResearchService } from '../integrations/research.js';
-import { MockCoDriveService } from '../integrations/codrive.js';
-import type { AIProvider } from '../providers/ai-provider.js';
+import { FakeTutorProvider } from './fake-provider.js';
 import type { TutorInput } from '@screentutor/shared';
-
-const quizProvider: AIProvider = {
-  name: 'mock',
-  async analyzeScreenAndQuestion(input) {
-    return {
-      mode: input.mode,
-      summary: 'Quiz on derivatives.',
-      spokenText: 'Here are three questions on derivatives.',
-      concept: 'derivatives',
-      confidence: 0.9,
-      provider: 'mock',
-      quiz: [{ id: 'q1', difficulty: 'easy', question: 'd/dx x^2?', answer: '2x' }],
-      timestamp: new Date().toISOString(),
-    };
-  },
-};
 
 describe('NoopObservabilityService', () => {
   it('handles tracing without emitting OTLP logs', () => {
@@ -99,14 +80,10 @@ describe('TutorOrchestrator Evaluations Integration', () => {
 
   beforeEach(() => {
     const memory = new InMemoryService();
-    const research = new MockResearchService();
     exporter = new InMemorySpanExporter();
     orchestrator = new TutorOrchestrator(
-      quizProvider,
+      new FakeTutorProvider(),
       memory,
-      new AgentRouter(quizProvider, memory, research),
-      research,
-      new MockCoDriveService(),
       new OtlpObservabilityService({ endpoint: 'https://example.ingest.elastic.cloud:443' }, exporter)
     );
   });
@@ -115,8 +92,8 @@ describe('TutorOrchestrator Evaluations Integration', () => {
     const input: TutorInput = {
       userId: 'user_123',
       sessionId: 'sess_123',
-      mode: 'quiz',
-      question: 'quiz me on derivatives',
+      mode: 'explain',
+      question: 'Explain this step',
     };
 
     const response = await orchestrator.handleQuestion(input);
@@ -124,11 +101,10 @@ describe('TutorOrchestrator Evaluations Integration', () => {
     expect(response.observability!.latencyMs).toBeGreaterThanOrEqual(0);
 
     const evals = response.observability!.evaluations;
-    expect(evals.point_tag_valid.score).toBe(1);
-    expect(evals.quiz_has_hidden_answer.score).toBe(1);
-    expect(evals.drawing_coordinates_valid.score).toBe(1);
-    expect(evals.safety_redaction_passed.score).toBe(1);
-    expect(evals.selected_agent_reasonable).toBeDefined();
+    expect(evals.point_tag_valid.passed).toBe(true);
+    expect(evals.has_drawings.passed).toBe(true);
+    expect(evals.steps_aligned.passed).toBe(true);
+    expect(evals.safety_redaction_passed.passed).toBe(true);
 
     const names = exporter.getFinishedSpans().map((s) => s.name);
     expect(names).toContain('TutorRequestReceived');

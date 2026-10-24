@@ -14,7 +14,6 @@ import {
   type CaptureResult,
 } from './screenshot.js';
 import { isWindowDenied, togglePrivacyMode, getPrivacyMode, getActiveWindowTitle } from './privacy.js';
-import { performApprovedAction } from './desktop-actions.js';
 import { registerHoldDictationShortcuts, unregisterHoldDictationShortcuts } from './shortcuts.js';
 import { isMac } from './platform.js';
 import { ensureMicrophone, getPermissionStatus, openPermissionSettings, type PermissionKind } from './permissions.js';
@@ -258,7 +257,7 @@ app.whenReady().then(() => {
 
     if (isMac) {
       const status = getPermissionStatus();
-      console.log(`[Permissions] screen=${status.screen} microphone=${status.microphone} accessibility=${status.accessibility}`);
+      console.log(`[Permissions] screen=${status.screen} microphone=${status.microphone}`);
       void ensureMicrophone().catch((err) => console.warn('[Permissions] Microphone request failed:', err));
     }
 
@@ -483,10 +482,6 @@ ipcMain.on('simulate-overlay-error', () => {
   }
 });
 
-ipcMain.handle('execute-approved-action', async (_event, action) => {
-  return performApprovedAction(action);
-});
-
 ipcMain.handle('get-active-window-title', async () => {
   return await getActiveWindowTitle();
 });
@@ -494,5 +489,5 @@ ipcMain.handle('get-active-window-title', async () => {
 ipcMain.handle('get-permission-status', () => getPermissionStatus());
 
 ipcMain.on('open-permission-settings', (_event, kind: PermissionKind) => {
-  if (kind === 'screen' || kind === 'microphone' || kind === 'accessibility') openPermissionSettings(kind);
+  if (kind === 'screen' || kind === 'microphone') openPermissionSettings(kind);
 });

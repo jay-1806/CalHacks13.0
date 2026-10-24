@@ -122,11 +122,3 @@ export function sanitizeResponseForCache(response: TutorResponse): TutorResponse
   const { observability: _obs, ...rest } = response;
   return rest as TutorResponse;
 }
-
-export function buildResearchCacheKey(
-  kind: 'research' | 'summary' | 'simpler' | 'practice',
-  parts: string[]
-): string {
-  const payload = [kind, ...parts.map((p) => p.trim().toLowerCase())].join('|');
-  return `research:${createHash('sha256').update(payload).digest('hex')}`;
-}

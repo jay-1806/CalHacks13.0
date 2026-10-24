@@ -241,20 +241,6 @@
   transform: translateX(2px);
 }
 
-/* Mode-coloured dot */
-.chip-mode-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #6b7280;
-}
-.demo-q-chip.mode-explain .chip-mode-dot  { background: #60a5fa; }
-.demo-q-chip.mode-hint .chip-mode-dot     { background: #facc15; }
-.demo-q-chip.mode-mistake .chip-mode-dot  { background: #f87171; }
-.demo-q-chip.mode-quiz .chip-mode-dot     { background: #34d399; }
-.demo-q-chip.mode-research .chip-mode-dot { background: #a78bfa; }
-
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .demo-panel-footer {
   padding: 8px 12px;

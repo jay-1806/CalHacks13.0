@@ -81,13 +81,10 @@ export class ClaudeProvider implements AIProvider {
 
     const promptText = buildUserPrompt({
       question: input.question,
-      mode: input.mode,
       learnerMemory: input.learnerMemory,
       recentTurns: input.recentTurns,
       screenMetadata: input.screenMetadata,
       appMetadata: input.appMetadata,
-      accessibilityTree: input.accessibilityTree,
-      researchContext: input.researchContext,
     });
 
     const content: Anthropic.ContentBlockParam[] = [];

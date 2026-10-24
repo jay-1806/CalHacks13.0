@@ -37,23 +37,6 @@ export const config = {
   MOSS_INDEX_NAME: process.env.MOSS_INDEX_NAME || 'screentutor-tutor-cache',
   /** Similarity needed to reuse an answer for a reworded question on the same screen */
   MOSS_MIN_SCORE: parseFloat(process.env.MOSS_MIN_SCORE || '0.9'),
-  RESEARCH_CACHE_TTL_SECONDS: parseInt(process.env.RESEARCH_CACHE_TTL_SECONDS || '3600', 10),
-
-  APIFY_API_TOKEN: process.env.APIFY_API_TOKEN || '',
-  APIFY_ENABLED: process.env.APIFY_ENABLED !== 'false',
-  APIFY_MAX_RESULTS: parseInt(process.env.APIFY_MAX_RESULTS || '3', 10),
-  APIFY_TIMEOUT_MS: parseInt(process.env.APIFY_TIMEOUT_MS || '20000', 10),
-
-  /** Co-drive plans steps with Claude computer use (needs ANTHROPIC_API_KEY) */
-  CODRIVE_ENABLED: process.env.CODRIVE_ENABLED !== 'false',
-  ENABLE_SAFE_ACTIONS: process.env.ENABLE_SAFE_ACTIONS === 'true',
-
-  /** REST base URL of the study-planner uAgent in services/fetch-agent */
-  FETCH_AGENT_URL: process.env.FETCH_AGENT_URL || 'http://localhost:8001',
-  /** Routing runs on every turn, so a slow or stopped agent must not hold it up */
-  FETCH_AGENT_TIMEOUT_MS: parseInt(process.env.FETCH_AGENT_TIMEOUT_MS || '800', 10),
-  FETCH_AGENTVERSE_ENABLED: process.env.FETCH_AGENTVERSE_ENABLED === 'true',
-
   /** Elastic managed OTLP endpoint, e.g. https://<id>.ingest.<region>.elastic.cloud:443 (any OTLP/HTTP collector works) */
   ELASTIC_OTLP_ENDPOINT: process.env.ELASTIC_OTLP_ENDPOINT || '',
   ELASTIC_API_KEY: process.env.ELASTIC_API_KEY || '',

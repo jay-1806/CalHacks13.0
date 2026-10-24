@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import { DrawingCommand } from './drawing.js';
-import { ProposedAction } from './action.js';
 import { SessionTurn } from './memory.js';
 
 // ---------------------------------------------------------------------------
 // Tutor Modes
 // ---------------------------------------------------------------------------
 
-export const TutorMode = z.enum(['explain', 'hint', 'mistake', 'quiz', 'review', 'research', 'codrive']);
+/**
+ * ScreenTutor currently does one thing: explain and work a math problem on screen.
+ * `mode` stays as the extension point for future lesson types (and matches the
+ * `mode` already stored in learner memory).
+ */
+export const TutorMode = z.enum(['explain']);
 export type TutorMode = z.infer<typeof TutorMode>;
 
 // ---------------------------------------------------------------------------
@@ -64,49 +68,21 @@ export type LearnerPreferences = z.infer<typeof LearnerPreferences>;
 export const TutorInput = z.object({
   userId: z.string(),
   sessionId: z.string(),
-  mode: TutorMode,
+  mode: TutorMode.default('explain'),
   question: z.string().min(1),
   screenshotBase64: z.string().optional(),
   screenMetadata: ScreenMetadata.optional(),
   appMetadata: AppMetadata.optional(),
   learnerPreferences: LearnerPreferences.optional(),
   learnerMemory: z.any().optional(),
-  /** Populated by orchestrator from Redis session history before the model call */
+  /** Populated by the orchestrator from session history before the model call */
   recentTurns: z.array(SessionTurn).optional(),
-  accessibilityTree: z.any().optional(),
-  researchContext: z.any().optional(),
   privacyMode: z.boolean().optional(),
-  /** Optional: stable ID of the active demo lesson — used by MockClaudeProvider for deterministic responses */
+  /** Optional: stable ID of the active demo lesson (part of the response cache key) */
   demoLessonId: z.string().optional(),
   devOverrideRedaction: z.boolean().optional(),
 });
 export type TutorInput = z.infer<typeof TutorInput>;
-
-// ---------------------------------------------------------------------------
-// Quiz Item
-// ---------------------------------------------------------------------------
-
-export const QuizItem = z.object({
-  id: z.string(),
-  difficulty: z.enum(['easy', 'medium', 'conceptual']),
-  question: z.string(),
-  options: z.array(z.string()).optional(),
-  answer: z.string(),
-  explanation: z.string().optional(),
-});
-export type QuizItem = z.infer<typeof QuizItem>;
-
-// ---------------------------------------------------------------------------
-// Hint Ladder
-// ---------------------------------------------------------------------------
-
-export const HintLadder = z.object({
-  conceptual: z.string(),
-  visual: z.string(),
-  nextStep: z.string(),
-  fullSolution: z.string(),
-});
-export type HintLadder = z.infer<typeof HintLadder>;
 
 export const PointTarget = z.object({
   x: z.number().nullable(),
@@ -134,28 +110,14 @@ export const TutorResponse = z.object({
   drawings: z.array(DrawingCommand).optional(),
   concept: z.string(),
   confidence: z.number().min(0).max(1),
-  hints: z.array(z.string()).optional(),
-  hintLadder: HintLadder.optional(),
-  quiz: z.array(QuizItem).optional(),
-  nextQuestion: z.string().optional(),
-  researchResult: z.any().optional(),
-  proposedActions: z.array(ProposedAction).optional(),
   memoryUpdates: z
     .object({
       detectedConcept: z.string().optional(),
       isWeakConcept: z.boolean().optional(),
-      preferredMode: TutorMode.optional(),
     })
     .optional(),
   rawModelText: z.string().optional(),
   providerMetadata: z.any().optional(),
-  routingDecision: z
-    .object({
-      selectedAgent: z.string(),
-      reason: z.string(),
-      provider: z.string().optional(),
-    })
-    .optional(),
   observability: z
     .object({
       traceId: z.string(),

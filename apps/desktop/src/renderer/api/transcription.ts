@@ -36,9 +36,8 @@ export class MockTranscriptionProvider implements TranscriptionProvider {
     }
     const defaults = [
       "Explain the step shown on my screen.",
-      "Give me a hint to solve this problem.",
-      "What mistake is in this code?",
-      "Can you quiz me on this topic?"
+      "How do I solve this problem?",
+      "Can you walk me through this equation?"
     ];
     this.genericIndex = (this.genericIndex + 1) % defaults.length;
     return defaults[this.genericIndex];

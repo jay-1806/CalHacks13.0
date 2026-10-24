@@ -3,7 +3,7 @@ import { DEMO_LESSONS, type DemoLesson } from '@screentutor/shared';
 import './DemoLessonsPanel.css';
 
 interface Props {
-  onSelectQuestion: (question: string, mode: string, lesson: DemoLesson) => void;
+  onSelectQuestion: (question: string, lesson: DemoLesson) => void;
   onClose: () => void;
 }
 
@@ -17,8 +17,8 @@ export default function DemoLessonsPanel({ onSelectQuestion, onClose }: Props) {
     ? DEMO_LESSONS
     : DEMO_LESSONS.filter(l => l.category === activeCategory);
 
-  const handleChip = (lesson: DemoLesson, q: { label: string; mode: string }) => {
-    onSelectQuestion(q.label, q.mode, lesson);
+  const handleChip = (lesson: DemoLesson, q: { label: string }) => {
+    onSelectQuestion(q.label, lesson);
   };
 
   return (
@@ -28,7 +28,7 @@ export default function DemoLessonsPanel({ onSelectQuestion, onClose }: Props) {
           <span className="demo-icon">🎓</span>
           <div>
             <h3 className="demo-title">Demo Lessons</h3>
-            <p className="demo-subtitle">Works offline · Mock mode</p>
+            <p className="demo-subtitle">Math problems to try the tutor on</p>
           </div>
         </div>
         <button className="demo-close-btn no-drag" onClick={onClose} aria-label="Close Demo Lessons">✕</button>
@@ -91,11 +91,9 @@ export default function DemoLessonsPanel({ onSelectQuestion, onClose }: Props) {
                   {lesson.suggestedQuestions.map((q, i) => (
                     <button
                       key={i}
-                      className={`demo-q-chip mode-${q.mode} no-drag`}
+                      className="demo-q-chip no-drag"
                       onClick={() => handleChip(lesson, q)}
-                      title={`Mode: ${q.mode}`}
                     >
-                      <span className="chip-mode-dot" />
                       {q.label}
                     </button>
                   ))}

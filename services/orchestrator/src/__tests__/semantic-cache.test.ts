@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   SemanticCache,
   buildTutorResponseCacheKey,
-  buildResearchCacheKey,
   sanitizeResponseForCache,
   hashScreenshot,
 } from '../cache/semantic-cache.js';
@@ -73,13 +72,6 @@ describe('buildTutorResponseCacheKey', () => {
     expect(keyA).not.toBe(keyB);
     expect(keyA).not.toBe(keyC);
     expect(keyA.startsWith('tutor:')).toBe(true);
-  });
-});
-
-describe('buildResearchCacheKey', () => {
-  it('prefixes by kind', () => {
-    expect(buildResearchCacheKey('research', ['pythagoras', 'intermediate', 'triangle'])).toMatch(/^research:/);
-    expect(buildResearchCacheKey('simpler', ['pythagoras'])).toMatch(/^research:/);
   });
 });
 

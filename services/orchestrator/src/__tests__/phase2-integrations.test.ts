@@ -4,10 +4,7 @@ import { ConvexMemoryService, type ConvexCaller } from '../memory/convex-memory.
 import { MossSimilarityIndex, type MossLike } from '../cache/moss-index.js';
 import { SemanticCache, buildTutorSimilarityHint } from '../cache/semantic-cache.js';
 import { InMemoryService } from '../memory/in-memory.js';
-import { ApifyResearchService, firstParagraph } from '../integrations/apify.js';
-import { FetchAgentverseProvider } from '../agents/fetch-provider.js';
-import type { SpecialistAgent } from '../agents/agent-router.js';
-import type { TutorInput, TutorResponse } from '@screentutor/shared';
+import type { TutorInput } from '@screentutor/shared';
 
 /** Names a function reference from anyApi, e.g. "memory:getProfile". */
 const fnName = (ref: any) => getFunctionName(ref);
@@ -130,95 +127,5 @@ describe('Moss similarity cache', () => {
     await index.add('k', 'text', { kind: 'tutor' });
     expect(moss.createIndex).toHaveBeenCalledOnce();
     expect(moss.addDocs).toHaveBeenCalledWith('i', [{ id: 'k', text: 'text', metadata: { kind: 'tutor' } }], { upsert: true });
-  });
-});
-
-describe('ApifyResearchService', () => {
-  const page = {
-    searchResult: { title: 'Chain rule', description: 'Differentiate composite functions.', url: 'https://www.khanacademy.org/chain-rule' },
-    markdown: '# Chain rule\n\n![img](x.png)\n\nThe chain rule tells us how to differentiate a composite function: multiply the derivative of the outer function by the derivative of the inner function.',
-  };
-
-  it('searches with a bearer token and summarizes the top page', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([page]), { status: 200 }));
-    const service = new ApifyResearchService({ token: 'apify_api_x', maxResults: 3, timeoutMs: 5000 }, undefined, fetchImpl as any);
-
-    const result = await service.researchConcept('chain_rule', 'beginner', 'derivative of sin(x^2)');
-
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toContain('rag-web-browser.apify.actor/search?query=chain+rule+explained+beginner+level');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer apify_api_x');
-    expect(result.summary).toMatch(/^The chain rule tells us/);
-    expect(result.sourceUrl).toBe('https://www.khanacademy.org/chain-rule');
-    expect(result.keyTakeaways).toEqual(['Differentiate composite functions.']);
-  });
-
-  it('returns a fallback result instead of throwing when Apify fails', async () => {
-    const fetchImpl = vi.fn(async () => new Response('nope', { status: 401 }));
-    const service = new ApifyResearchService({ token: 't', maxResults: 3, timeoutMs: 5000 }, undefined, fetchImpl as any);
-    const result = await service.researchConcept('algebra', 'beginner', '');
-    expect(result.confidence).toBe(0.5);
-    expect(result.summary).toContain('401');
-  });
-
-  it('skips headings, images and lists when picking a summary paragraph', () => {
-    expect(firstParagraph('# T\n\n- a list item that is long enough to be skipped by the paragraph picker ok\n\n' + 'x'.repeat(90))).toBe('x'.repeat(90));
-  });
-});
-
-describe('FetchAgentverseProvider', () => {
-  const localAgent = (name: string): SpecialistAgent => ({
-    name,
-    execute: vi.fn(async (): Promise<TutorResponse> => ({ summary: `local ${name}`, spokenText: 'local', concept: 'general', confidence: 1 })),
-  });
-  const agents = {
-    MathTutorAgent: localAgent('MathTutorAgent'),
-    QuizGeneratorAgent: localAgent('QuizGeneratorAgent'),
-    LearningPlanAgent: localAgent('LearningPlanAgent'),
-    MisconceptionDetectorAgent: localAgent('MisconceptionDetectorAgent'),
-    ResourceFinderAgent: localAgent('ResourceFinderAgent'),
-  };
-  const input: TutorInput = {
-    userId: 'u',
-    sessionId: 's',
-    mode: 'review',
-    question: 'what should I study',
-    learnerMemory: { weakConcepts: [{ concept: 'chain_rule', confidence: 0.8, timesSeen: 2, lastSeenAt: '2026-10-01T00:00:00Z', evidence: 'x', firstSeenAt: 'x' }] },
-  };
-
-  it('uses the agent for routing and learning plans', async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      new Response(
-        JSON.stringify(
-          url.endsWith('/route')
-            ? { selectedAgent: 'LearningPlanAgent', reason: 'review' }
-            : { summary: 'Plan', spokenText: 'Start with chain rule.', hints: ['1. chain rule'], concept: 'chain_rule' }
-        ),
-        { status: 200 }
-      )
-    );
-    const provider = new FetchAgentverseProvider({ baseUrl: 'http://localhost:8001', timeoutMs: 500 }, agents, fetchImpl as any);
-
-    const decision = await provider.route(input);
-    expect(decision).toMatchObject({ selectedAgent: 'LearningPlanAgent', provider: 'Fetch AI Agentverse' });
-
-    const out = await provider.execute('LearningPlanAgent', input);
-    expect(out.response.spokenText).toBe('Start with chain rule.');
-    const planBody = JSON.parse((fetchImpl.mock.calls[1] as any)[1].body);
-    expect(planBody.weakConcepts[0]).toEqual({ concept: 'chain_rule', confidence: 0.8, timesSeen: 2, lastSeenAt: '2026-10-01T00:00:00Z' });
-  });
-
-  it('falls back to local routing and agents when the uAgent is down', async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error('ECONNREFUSED');
-    });
-    const provider = new FetchAgentverseProvider({ baseUrl: 'http://localhost:8001', timeoutMs: 500 }, agents, fetchImpl as any);
-
-    const decision = await provider.route(input);
-    expect(decision.selectedAgent).toBe('LearningPlanAgent');
-    expect(decision.provider).toContain('fallback');
-
-    const out = await provider.execute('LearningPlanAgent', input);
-    expect(out.response.summary).toBe('local LearningPlanAgent');
   });
 });

@@ -3,8 +3,8 @@ export {};
 declare global {
   interface ElectronAPI {
     platform: string;
-    getPermissionStatus: () => Promise<{ platform: string; screen: string; microphone: string; accessibility: boolean }>;
-    openPermissionSettings: (kind: 'screen' | 'microphone' | 'accessibility') => void;
+    getPermissionStatus: () => Promise<{ platform: string; screen: string; microphone: string }>;
+    openPermissionSettings: (kind: 'screen' | 'microphone') => void;
     captureScreen: () => Promise<any>;
     startRegionSelect: () => Promise<{ ok: boolean; reason?: string }>;
     cancelRegionSelect: () => void;
@@ -52,7 +52,6 @@ declare global {
     simulateOverlayError: () => void;
     onTriggerOverlayError: (callback: () => void) => void;
     getActiveWindowTitle: () => Promise<string | null>;
-    executeApprovedAction: (action: unknown) => Promise<{ success: boolean; message: string }>;
     setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => void;
     onCursorMove: (callback: (point: { x: number; y: number }) => void) => void;
     onFlyToPoint: (callback: (point: { x: number; y: number }) => void) => void;

@@ -4,7 +4,7 @@ import FloatingLauncher from './components/FloatingLauncher';
 import { useScreenCapture, getScreenMetadata } from './hooks/useScreenCapture';
 import { useTutor } from './hooks/useTutor';
 import { useChatHistory } from './hooks/useChatHistory';
-import { TutorMode, buildNarrationSteps, estimateSpeechDurationMs } from '@screentutor/shared';
+import { buildNarrationSteps, estimateSpeechDurationMs } from '@screentutor/shared';
 import { transcriptionProvider } from './api/transcription';
 import { ttsProvider } from './api/tts';
 import { performanceTracker } from './sentry';
@@ -25,15 +25,6 @@ export default function App() {
     return localStorage.getItem('screentutor_muted') === 'true';
   });
   const [activeLessonId, setActiveLessonId] = useState<string | undefined>(undefined);
-  const [mode, setMode] = useState<TutorMode>(() => {
-    const saved = localStorage.getItem('screentutor_mode');
-    return (saved as TutorMode) || 'explain';
-  });
-
-  const handleModeChange = (newMode: TutorMode) => {
-    setMode(newMode);
-    localStorage.setItem('screentutor_mode', newMode);
-  };
 
   const { screenshot, captureScreen, clearScreenshot, startRegionSelect, isSelectingRegion } = useScreenCapture();
   const { askQuestion, response, isLoading, isStreaming, isResponseReady, error, clearResponse } = useTutor();
@@ -41,7 +32,6 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
 
   const activeLessonIdRef = useRef(activeLessonId);
-  const modeRef = useRef(mode);
   const screenshotRef = useRef(screenshot);
   const isRecordingRef = useRef(isRecordingVoice);
   const isPanelExpandedRef = useRef(isPanelExpanded);
@@ -59,12 +49,11 @@ export default function App() {
 
   useEffect(() => {
     activeLessonIdRef.current = activeLessonId;
-    modeRef.current = mode;
     screenshotRef.current = screenshot;
     isRecordingRef.current = isRecordingVoice;
     isPanelExpandedRef.current = isPanelExpanded;
     activeTurnIdRef.current = activeTurnId;
-  }, [activeLessonId, mode, screenshot, isRecordingVoice, isPanelExpanded, activeTurnId]);
+  }, [activeLessonId, screenshot, isRecordingVoice, isPanelExpanded, activeTurnId]);
 
   useEffect(() => {
     if (screenshot?.isRegionCapture && screenshot.base64 && !isPanelExpandedRef.current) {
@@ -192,7 +181,7 @@ export default function App() {
         if (!wasHoldDictation && !isPanelExpandedRef.current) {
           expandPanel();
         }
-        startTurn(transcript.trim(), modeRef.current);
+        startTurn(transcript.trim());
         setIsScanning(true);
         let capBase64 = screenshotRef.current?.base64;
         let capMeta = getScreenMetadata(screenshotRef.current);
@@ -214,7 +203,7 @@ export default function App() {
         }
 
         const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
-        const res = await askQuestion(transcript, modeRef.current, capBase64, capMeta, activeLessonIdRef.current, devOverride);
+        const res = await askQuestion(transcript, capBase64, capMeta, activeLessonIdRef.current, devOverride);
         setBuddyState(res ? 'responding' : 'error');
       } else {
         setBuddyState('idle');
@@ -445,7 +434,7 @@ export default function App() {
       }
 
       const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
-      const res = await askQuestion(questionText, mode, capBase64, capMeta, activeLessonId, devOverride);
+      const res = await askQuestion(questionText, capBase64, capMeta, activeLessonId, devOverride);
       setBuddyState(res ? 'responding' : 'error');
       performanceTracker.endSpan('total_interaction_latency');
     } catch {
@@ -471,7 +460,6 @@ export default function App() {
     clearResponse();
     clearScreenshot();
     resetTurns();
-    handleModeChange('explain');
     setActiveLessonId('calculus_u_sub');
     setQuestion('');
 
@@ -525,8 +513,6 @@ export default function App() {
         <ChatPanel
           screenshot={screenshot}
           onClose={collapsePanel}
-          mode={mode}
-          onModeChange={handleModeChange}
           response={response}
           isLoading={isLoading}
           isStreaming={isStreaming}

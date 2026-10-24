@@ -31,16 +31,14 @@ const sampleTurns: SessionTurn[] = [
 describe('recent session turns in Claude prompt', () => {
   it('formats session turns as compact history lines', () => {
     const formatted = formatSessionHistoryForPrompt(sampleTurns);
-    expect(formatted).toContain('1. [explain]');
-    expect(formatted).toContain('Question: "What is the distributive property?"');
+    expect(formatted).toContain('1. Question: "What is the distributive property?"');
     expect(formatted).toContain('Concept: distributive_property');
-    expect(formatted).toContain('2. [hint]');
+    expect(formatted).toContain('2. Question:');
   });
 
   it('includes recent turns and continuity instructions in buildUserPrompt', () => {
     const prompt = buildUserPrompt({
       question: 'Why did we multiply by negative two?',
-      mode: 'explain',
       recentTurns: sampleTurns,
     });
 
@@ -53,7 +51,6 @@ describe('recent session turns in Claude prompt', () => {
   it('omits history section when there are no prior turns', () => {
     const prompt = buildUserPrompt({
       question: 'Explain this step.',
-      mode: 'explain',
     });
 
     expect(prompt).not.toContain('Recent conversation in this session');
@@ -62,7 +59,6 @@ describe('recent session turns in Claude prompt', () => {
   it('includes coordinate guide from screenMetadata alongside session history', () => {
     const prompt = buildUserPrompt({
       question: 'Point to the hypotenuse.',
-      mode: 'explain',
       recentTurns: sampleTurns,
       screenMetadata: {
         imageWidth: 1920,

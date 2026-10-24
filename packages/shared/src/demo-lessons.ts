@@ -1,26 +1,23 @@
 /**
- * Bundled demo lessons for offline/mock-mode demo.
+ * Bundled math lessons to try the tutor on.
  *
  * Each lesson has:
- *  - id: stable key used by MockClaudeProvider to return deterministic responses
+ *  - id: stable key (also part of the response cache key)
  *  - title: display name
- *  - category: grouping (Algebra | Calculus | Graphs | Code)
- *  - content: the rendered math/code string shown in the lesson card
+ *  - category: grouping (Algebra | Calculus | Graphs)
+ *  - content: the math shown in the lesson card
  *  - description: one-line context
- *  - suggestedQuestions: ready-to-fire chips
- *  - defaultMode: TutorMode to pre-select when this lesson is loaded
- *  - pointHints: pixel hints (0–1 fractions) for where the mock AI should point
+ *  - suggestedQuestions: ready-to-fire question chips
  */
 
 export interface DemoLesson {
   id: string;
   title: string;
-  category: 'Algebra' | 'Calculus' | 'Graphs' | 'Code';
+  category: 'Algebra' | 'Calculus' | 'Graphs';
   emoji: string;
   content: string;
   description: string;
-  suggestedQuestions: Array<{ label: string; mode: string }>;
-  defaultMode: string;
+  suggestedQuestions: Array<{ label: string }>;
   /** Visual hint lines — shown as a mini canvas in the lesson card */
   contentLines: string[];
 }
@@ -34,12 +31,9 @@ export const DEMO_LESSONS: DemoLesson[] = [
     content: '2(x + 3) = 2x + 6',
     description: 'Expanding a factor across parentheses',
     contentLines: ['2(x + 3)', '= 2·x + 2·3', '= 2x + 6'],
-    defaultMode: 'explain',
     suggestedQuestions: [
-      { label: 'Explain this step.', mode: 'explain' },
-      { label: 'Why does the 2 multiply both terms?', mode: 'explain' },
-      { label: 'Give me a hint.', mode: 'hint' },
-      { label: 'Quiz me.', mode: 'quiz' },
+      { label: 'Explain this step.' },
+      { label: 'Why does the 2 multiply both terms?' },
     ],
   },
   {
@@ -50,11 +44,8 @@ export const DEMO_LESSONS: DemoLesson[] = [
     content: 'sqrt(a + b) = sqrt(a) + sqrt(b)',
     description: "Proposed student solution (incorrect)",
     contentLines: ['Proposed student solution:', 'sqrt(a + b) = sqrt(a) + sqrt(b)', '← Incorrect'],
-    defaultMode: 'mistake',
     suggestedQuestions: [
-      { label: 'What mistake did I make?', mode: 'mistake' },
-      { label: 'Why is this wrong?', mode: 'explain' },
-      { label: 'Give me a hint.', mode: 'hint' },
+      { label: 'Why is this wrong?' },
     ],
   },
   {
@@ -65,11 +56,9 @@ export const DEMO_LESSONS: DemoLesson[] = [
     content: 'd/dx sin(x^2) = cos(x^2) · 2x',
     description: 'Derivative of a composite function',
     contentLines: ['d/dx sin(x^2)', '= cos(x^2) · d/dx(x^2)', '= cos(x^2) · 2x'],
-    defaultMode: 'explain',
     suggestedQuestions: [
-      { label: 'Explain this derivative.', mode: 'explain' },
-      { label: 'Where is the inner function?', mode: 'explain' },
-      { label: 'Give me a hint.', mode: 'hint' },
+      { label: 'Explain this derivative.' },
+      { label: 'Where is the inner function?' },
     ],
   },
   {
@@ -85,12 +74,9 @@ export const DEMO_LESSONS: DemoLesson[] = [
       'du = 2x dx',
       '∫ cos(u) du',
     ],
-    defaultMode: 'explain',
     suggestedQuestions: [
-      { label: 'Explain this integral.', mode: 'explain' },
-      { label: 'Why did they choose u?', mode: 'explain' },
-      { label: 'Give me a hint, not the answer.', mode: 'hint' },
-      { label: 'Quiz me.', mode: 'quiz' },
+      { label: 'Explain this integral.' },
+      { label: 'Why did they choose u?' },
     ],
   },
   {
@@ -107,34 +93,9 @@ export const DEMO_LESSONS: DemoLesson[] = [
       '- Slope: positive when x > 0',
       '- Increasing/Decreasing regions',
     ],
-    defaultMode: 'explain',
     suggestedQuestions: [
-      { label: 'Explain this graph.', mode: 'explain' },
-      { label: 'Where is the slope positive?', mode: 'explain' },
-      { label: 'Quiz me.', mode: 'quiz' },
-    ],
-  },
-  {
-    id: 'code_error',
-    title: 'Coding Error',
-    category: 'Code',
-    emoji: '🐛',
-    content: 'Small JavaScript/Python function with an obvious bug and error message.',
-    description: 'A function with a bug and its error message',
-    contentLines: [
-      'def sum_list(nums):',
-      '    total = 0',
-      '    for i in range(len(nums) + 1):  # BUG',
-      '        total += nums[i]',
-      '    return total',
-      '',
-      '# IndexError: list index out of range',
-    ],
-    defaultMode: 'mistake',
-    suggestedQuestions: [
-      { label: 'Explain this error.', mode: 'explain' },
-      { label: 'What mistake did I make?', mode: 'mistake' },
-      { label: 'Give me a hint.', mode: 'hint' },
+      { label: 'Explain this graph.' },
+      { label: 'Where is the slope positive?' },
     ],
   },
 ];

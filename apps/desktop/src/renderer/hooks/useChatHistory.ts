@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { TutorMode, TutorResponse } from '@screentutor/shared';
+import type { TutorResponse } from '@screentutor/shared';
 
 import type { StoredExplanation } from '../types/explanation';
 
@@ -8,28 +8,17 @@ export type AiPhase = 'scanning' | 'thinking' | 'outputting' | 'done' | 'error';
 export interface ChatTurn {
   id: string;
   userText: string;
-  mode: TutorMode;
   aiPhase: AiPhase;
   reference?: string;
   explanation?: StoredExplanation;
   error?: string;
 }
 
-const MODE_LABELS: Record<TutorMode, string> = {
-  explain: 'Explanation',
-  hint: 'Hint',
-  mistake: 'Mistake check',
-  quiz: 'Quiz',
-  review: 'Review',
-  research: 'Research',
-  codrive: 'Co-drive',
-};
-
-function getTurnReference(response: TutorResponse, mode: TutorMode): string {
+function getTurnReference(response: TutorResponse): string {
   if (response.summary && response.summary !== 'Thinking...') {
     return response.summary;
   }
-  return `${MODE_LABELS[mode]} delivered`;
+  return 'Explanation delivered';
 }
 
 function buildExplanation(response: TutorResponse): StoredExplanation | undefined {
@@ -59,9 +48,9 @@ export function useChatHistory() {
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
 
-  const startTurn = useCallback((userText: string, mode: TutorMode) => {
+  const startTurn = useCallback((userText: string) => {
     const id = crypto.randomUUID();
-    const turn: ChatTurn = { id, userText, mode, aiPhase: 'scanning' };
+    const turn: ChatTurn = { id, userText, aiPhase: 'scanning' };
     setTurns(prev => [...prev, turn]);
     setActiveTurnId(id);
     activeTurnIdRef.current = id;
@@ -110,7 +99,7 @@ export function useChatHistory() {
         return {
           ...turn,
           aiPhase: 'done' as const,
-          reference: getTurnReference(params.response, turn.mode),
+          reference: getTurnReference(params.response),
           explanation: buildExplanation(params.response) ?? turn.explanation,
         };
       }

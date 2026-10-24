@@ -132,23 +132,6 @@ export default function MemoryPanel({ userId }: Props) {
         </div>
 
         <div className="memory-section">
-          <h5>Quiz Outcomes ({profile.quizOutcomes?.length || 0})</h5>
-          {(!profile.quizOutcomes || profile.quizOutcomes.length === 0) ? (
-            <p className="empty-state">No quiz outcomes logged yet.</p>
-          ) : (
-            <ul className="outcome-list">
-              {profile.quizOutcomes.map((qo, i) => (
-                <li key={i} className="outcome-item">
-                  <span className="outcome-status">{qo.correct ? '✅' : '❌'}</span>
-                  <span className="outcome-concept">{qo.concept.replace(/_/g, ' ')}</span>
-                  <span className="outcome-time">{new Date(qo.timestamp).toLocaleTimeString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="memory-section">
           <h5>Recent Questions ({profile.recentQuestions.length})</h5>
           {profile.recentQuestions.length === 0 ? (
             <p className="empty-state">No recent questions.</p>
@@ -157,7 +140,6 @@ export default function MemoryPanel({ userId }: Props) {
               {profile.recentQuestions.map((rq, i) => (
                 <li key={i}>
                   <span className="q-text">"{rq.question}"</span>
-                  <span className="q-mode badge">{rq.mode}</span>
                 </li>
               ))}
             </ul>

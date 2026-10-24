@@ -4,8 +4,6 @@
 export * from './schemas/drawing.js';
 export * from './schemas/tutor.js';
 export * from './schemas/memory.js';
-export * from './schemas/action.js';
-export * from './schemas/research.js';
 export * from './sponsors.js';
 export * from './point-parser.js';
 export * from './overlay-refine.js';
@@ -18,7 +16,7 @@ export * from './explanation-format.js';
 // Privacy
 export * from './privacy.js';
 
-// Demo lessons (offline/mock mode)
+// Demo math lessons
 export * from './demo-lessons.js';
 
 // Redaction & Observability Safety
@@ -28,6 +26,5 @@ export * from './redaction.js';
 export * from './coordinates.js';
 export * from './capture-region.js';
 
-// Key combos (Co-drive input on Windows/macOS)
-export * from './key-combo.js';
+// macOS modifier flags (hold-to-talk)
 export * from './keymap-darwin.js';

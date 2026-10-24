@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { TutorResponse, TutorMode, isWindowTitleDenied, getDenyReason } from '@screentutor/shared';
+import { TutorResponse, isWindowTitleDenied, getDenyReason } from '@screentutor/shared';
 import { askTutor } from '../api/client';
 import { ttsProvider } from '../api/tts';
 import * as Sentry from '@sentry/react';
@@ -19,7 +19,6 @@ export function useTutor() {
 
   const askQuestion = useCallback(async (
     question: string,
-    mode: TutorMode,
     screenshotBase64?: string,
     screenMetadata?: any,
     demoLessonId?: string,
@@ -60,7 +59,6 @@ export function useTutor() {
       const input = {
         userId: 'user_123',
         sessionId: 'session_123',
-        mode,
         question,
         screenshotBase64,
         screenMetadata,

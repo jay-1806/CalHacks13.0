@@ -39,11 +39,8 @@ export default function SponsorStatusPanel() {
   const formatName = (name: string) => {
     switch (name) {
       case 'claude': return 'Claude (Anthropic)';
-      case 'codrive': return 'Claude Computer Use (Co-drive)';
       case 'convex': return 'Convex Memory';
       case 'moss': return 'Moss Semantic Cache';
-      case 'apify': return 'Apify Web Research';
-      case 'fetch_agentverse': return 'Fetch AI / Agentverse';
       case 'elastic': return 'Elastic Observability';
       case 'sentry': return 'Sentry Monitoring';
       case 'cartesia': return 'Cartesia Voice';

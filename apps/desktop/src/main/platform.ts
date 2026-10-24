@@ -6,5 +6,3 @@ export const isWindows = process.platform === 'win32';
 export const HOLD_HOTKEY_ACCELERATOR = 'CommandOrControl+Shift+E';
 export const HOLD_HOTKEY_LABEL = isMac ? 'Cmd+Shift+E' : 'Ctrl+Shift+E';
 
-/** Paste shortcut used by Co-drive's `type` action (typing is done via clipboard). */
-export const PASTE_COMBO = isMac ? 'cmd+v' : 'ctrl+v';
