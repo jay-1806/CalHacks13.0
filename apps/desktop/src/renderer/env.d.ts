@@ -36,14 +36,14 @@ declare global {
     startOverlayNarration: (payload: {
       spokenText: string;
       overlayText: string;
-      durationMs: number;
       captureRegion?: { x: number; y: number; width: number; height: number } | null;
     }) => void;
     finishOverlayNarration: () => void;
+    overlayNarrationStep: (index: number) => void;
+    onOverlayNarrationStep: (callback: (index: number) => void) => void;
     onOverlayNarrationStart: (callback: (payload: {
       spokenText: string;
       overlayText: string;
-      durationMs: number;
       captureRegion?: { x: number; y: number; width: number; height: number } | null;
     }) => void) => void;
     onOverlayNarrationFinish: (callback: () => void) => void;

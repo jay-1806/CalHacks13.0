@@ -133,10 +133,9 @@ export default function AnnotationOverlay() {
   }>({ visibleText: '', events: [], charIndex: 0, intervalId: null });
 
   const narrationRef = useRef<{
-    timers: ReturnType<typeof setTimeout>[];
     steps: NarrationStep[];
     stepIndex: number;
-  }>({ timers: [], steps: [], stepIndex: -1 });
+  }>({ steps: [], stepIndex: -1 });
   const narrationStartedRef = useRef(false);
   const charStreamFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -148,11 +147,9 @@ export default function AnnotationOverlay() {
     }
   };
 
+  /** Forget the current narration so late step events from the app are ignored. */
   const stopNarration = () => {
-    for (const timer of narrationRef.current.timers) {
-      clearTimeout(timer);
-    }
-    narrationRef.current.timers = [];
+    narrationRef.current = { steps: [], stepIndex: -1 };
   };
 
   const enqueuePoint = (px: number, py: number, label: string) => {
@@ -272,23 +269,25 @@ export default function AnnotationOverlay() {
   };
 
   const finishNarration = () => {
-    stopNarration();
     const steps = narrationRef.current.steps;
     if (steps.length === 0) return;
+    stopNarration();
 
     setDisplayedText(steps.map((step) => step.display).filter(Boolean).join('\n'));
     applyNarrationStep(steps.length - 1, steps);
   };
 
+  /**
+   * Prepare a narration's steps. Nothing is shown on a timer: each step is applied
+   * when the app reports that its audio started (onOverlayNarrationStep).
+   */
   const startNarration = (
     spokenText: string,
     overlayText: string,
-    durationMs: number,
     captureRegion?: CaptureRegion | null
   ) => {
     captureRegionRef.current = captureRegion ?? null;
     stopCharStream();
-    stopNarration();
     if (charStreamFallbackRef.current) {
       clearTimeout(charStreamFallbackRef.current);
       charStreamFallbackRef.current = null;
@@ -311,15 +310,6 @@ export default function AnnotationOverlay() {
       startCharStream(parseStreamTags(overlayText || pointRef.current?.text || ''));
       return;
     }
-
-    const totalChars = steps.reduce((sum, step) => sum + step.spoken.length, 0) || 1;
-    let elapsed = 0;
-
-    steps.forEach((_step, index) => {
-      const timer = setTimeout(() => applyNarrationStep(index, steps), elapsed);
-      narrationRef.current.timers.push(timer);
-      elapsed += durationMs * (steps[index].spoken.length / totalChars);
-    });
   };
 
   const persistExplanation = useCallback((visible: boolean) => {
@@ -523,10 +513,14 @@ export default function AnnotationOverlay() {
     window.electronAPI.onOverlayNarrationStart((data: {
       spokenText: string;
       overlayText: string;
-      durationMs: number;
       captureRegion?: CaptureRegion | null;
     }) => {
-      startNarration(data.spokenText, data.overlayText, data.durationMs, data.captureRegion);
+      startNarration(data.spokenText, data.overlayText, data.captureRegion);
+    });
+
+    window.electronAPI.onOverlayNarrationStep((index: number) => {
+      const steps = narrationRef.current.steps;
+      if (index >= 0 && index < steps.length) applyNarrationStep(index, steps);
     });
 
     window.electronAPI.onOverlayNarrationFinish(() => {

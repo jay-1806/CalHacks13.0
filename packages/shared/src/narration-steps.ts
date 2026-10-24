@@ -36,7 +36,9 @@ export function buildNarrationSteps(spokenText: string, overlayText: string): Na
   const steps: NarrationStep[] = [];
 
   for (let i = 0; i < lineCount; i++) {
-    const spoken = spokenLines[i] ?? spokenLines[spokenLines.length - 1] ?? spokenText.trim();
+    // Extra overlay lines get no speech of their own (repeating the last sentence
+    // would make the voice say it twice); they play right after the previous step.
+    const spoken = spokenLines[i] ?? (i === 0 ? spokenText.trim() : '');
     const overlaySegment = ensureStepClear(
       overlayLines[i] ?? overlayLines[overlayLines.length - 1] ?? overlayText.trim()
     );
@@ -51,6 +53,16 @@ export function buildNarrationSteps(spokenText: string, overlayText: string): Na
   }
 
   return steps.filter((s) => s.display || s.spoken || s.events.length > 0);
+}
+
+/**
+ * Estimated speaking time of one narration step, for when there is no audio to
+ * follow (muted). Fitted to Cartesia Sonic on a 9-step geometry explanation:
+ * ~1.3 s per sentence (including the pause after it) plus ~66 ms per character.
+ */
+export function estimateStepDurationMs(spoken: string): number {
+  const chars = spoken.trim().length;
+  return chars === 0 ? 0 : Math.round(1280 + 66 * chars);
 }
 
 /** Rough TTS duration from character count (~14 chars/sec). */

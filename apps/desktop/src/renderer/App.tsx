@@ -4,9 +4,9 @@ import FloatingLauncher from './components/FloatingLauncher';
 import { useScreenCapture, getScreenMetadata } from './hooks/useScreenCapture';
 import { useTutor } from './hooks/useTutor';
 import { useChatHistory } from './hooks/useChatHistory';
-import { buildNarrationSteps, estimateSpeechDurationMs } from '@screentutor/shared';
+import { buildNarrationSteps, estimateStepDurationMs } from '@screentutor/shared';
 import { transcriptionProvider } from './api/transcription';
-import { ttsProvider } from './api/tts';
+import { playSilently, ttsProvider, type NarrationHandlers } from './api/tts';
 import { performanceTracker } from './sentry';
 import { PANEL_WIDTH, PANEL_HEIGHT, COLLAPSED_SIZE } from './panelLayout';
 import type { StoredExplanation } from './types/explanation';
@@ -45,7 +45,10 @@ export default function App() {
   const stopVoiceRecordingRef = useRef<() => Promise<void>>(async () => {});
   const activeTurnIdRef = useRef(activeTurnId);
   const visibleExplanationTurnIdRef = useRef<string | null>(null);
-  const chatRevealTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** Cancels a muted (timer-paced) narration, if one is running. */
+  const silentNarrationRef = useRef<(() => void) | null>(null);
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
 
   useEffect(() => {
     activeLessonIdRef.current = activeLessonId;
@@ -81,7 +84,7 @@ export default function App() {
 
     if (isMuted) {
       const text = response?.spokenText || response?.spokenExplanation || '';
-      const ms = Math.max(2500, text.length * 35);
+      const ms = Math.max(2500, text.split('\n').reduce((sum, line) => sum + estimateStepDurationMs(line), 0));
       const timer = setTimeout(() => setResponseDelivered(true), ms);
       return () => clearTimeout(timer);
     }
@@ -302,50 +305,20 @@ export default function App() {
     });
   }, [isScanning, isLoading, isStreaming, isSpeaking, isResponseReady, responseDelivered, response, error, syncActiveTurn]);
 
-  const clearChatRevealTimers = () => {
-    for (const timer of chatRevealTimersRef.current) {
-      clearTimeout(timer);
-    }
-    chatRevealTimersRef.current = [];
-  };
-
-  const beginSyncedNarration = (spoken: string, overlay: string) => {
-    const steps = buildNarrationSteps(spoken, overlay);
-    const durationMs = estimateSpeechDurationMs(spoken);
-    setRevealedSpokenText('');
-
-    window.electronAPI.startOverlayNarration({
-      spokenText: spoken,
-      overlayText: overlay,
-      durationMs,
-      captureRegion: screenshotRef.current?.captureRegion ?? null,
-    });
-
-    clearChatRevealTimers();
-    const totalChars = steps.reduce((sum, step) => sum + step.spoken.length, 0) || 1;
-    let elapsed = 0;
-
-    steps.forEach((step, index) => {
-      const timer = setTimeout(() => {
-        setRevealedSpokenText(
-          steps
-            .slice(0, index + 1)
-            .map((s) => s.spoken)
-            .filter(Boolean)
-            .join('\n')
-        );
-      }, elapsed);
-      chatRevealTimersRef.current.push(timer);
-      elapsed += durationMs * (step.spoken.length / totalChars);
-    });
+  const stopNarration = () => {
+    silentNarrationRef.current?.();
+    silentNarrationRef.current = null;
+    ttsProvider.stop();
   };
 
   const finishSyncedNarration = (spoken: string) => {
-    clearChatRevealTimers();
+    silentNarrationRef.current = null;
     window.electronAPI.finishOverlayNarration();
     setRevealedSpokenText(spoken);
   };
 
+  // One clock for everything: the voice. Each step's pointer, drawings and chat
+  // text appear when that step actually starts being heard, so they can't drift.
   useEffect(() => {
     if (!response || isStreaming || !isResponseReady) return;
 
@@ -353,41 +326,55 @@ export default function App() {
     const overlayText = response.overlayText || response.visualText || '';
     if (!spoken) return;
 
-    beginSyncedNarration(spoken, overlayText);
+    const steps = buildNarrationSteps(spoken, overlayText).map((step) => step.spoken);
+    setRevealedSpokenText('');
+    window.electronAPI.startOverlayNarration({
+      spokenText: spoken,
+      overlayText,
+      captureRegion: screenshotRef.current?.captureRegion ?? null,
+    });
 
-    return () => {
-      clearChatRevealTimers();
+    const onStep = (index: number) => {
+      window.electronAPI.overlayNarrationStep(index);
+      setRevealedSpokenText(steps.slice(0, index + 1).filter(Boolean).join('\n'));
     };
+
+    if (isMutedRef.current) {
+      silentNarrationRef.current = playSilently(steps, estimateStepDurationMs, {
+        onStep,
+        onEnd: () => finishSyncedNarration(spoken),
+      });
+    } else {
+      const handlers: NarrationHandlers = {
+        onStart: () => setIsSpeaking(true),
+        onStep,
+        onEnd: () => {
+          finishSyncedNarration(spoken);
+          setIsSpeaking(false);
+        },
+      };
+      ttsProvider.speakSteps(steps, handlers);
+    }
+
+    return () => stopNarration();
   }, [response, isStreaming, isResponseReady]);
 
+  // Muting mid-answer stops the voice and shows the rest of the explanation at once.
   useEffect(() => {
-    if (response && (response.spokenText || response.spokenExplanation) && !isStreaming) {
-      const textToSpeak = response.spokenText || response.spokenExplanation || '';
+    if (!isMuted || !ttsProvider.isSpeaking()) return;
+    ttsProvider.stop();
+    setIsSpeaking(false);
+    finishSyncedNarration(response?.spokenText || response?.spokenExplanation || '');
+  }, [isMuted]);
 
-      if (textToSpeak && !isMuted) {
-        ttsProvider.speak(
-          textToSpeak,
-          () => setIsSpeaking(true),
-          () => {
-            finishSyncedNarration(textToSpeak);
-            setIsSpeaking(false);
-          }
-        );
-      } else if (textToSpeak && isMuted) {
-        const timer = setTimeout(
-          () => finishSyncedNarration(textToSpeak),
-          estimateSpeechDurationMs(textToSpeak)
-        );
-        return () => clearTimeout(timer);
-      }
-    } else if (!isStreaming && !response) {
-      ttsProvider.stop();
+  useEffect(() => {
+    if (!isStreaming && !response) {
+      stopNarration();
       setIsSpeaking(false);
       setRevealedSpokenText('');
-      clearChatRevealTimers();
       window.electronAPI.finishOverlayNarration();
     }
-  }, [response, isMuted, isStreaming]);
+  }, [response, isStreaming]);
 
   useEffect(() => {
     if (response && response.drawings && response.drawings.length > 0) {
@@ -402,10 +389,9 @@ export default function App() {
   }, [response]);
 
   const handleAsk = async (questionText: string) => {
-    ttsProvider.stop();
+    stopNarration();
     setIsSpeaking(false);
     setRevealedSpokenText('');
-    clearChatRevealTimers();
     window.electronAPI.finishOverlayNarration();
     setBuddyState('thinking');
     try {

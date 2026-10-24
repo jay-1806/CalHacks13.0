@@ -429,6 +429,12 @@ ipcMain.on('start-overlay-narration', (_event, payload) => {
   }
 });
 
+ipcMain.on('overlay-narration-step', (_event, index: number) => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send('onOverlayNarrationStep', index);
+  }
+});
+
 ipcMain.on('finish-overlay-narration', () => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.webContents.send('onOverlayNarrationFinish');

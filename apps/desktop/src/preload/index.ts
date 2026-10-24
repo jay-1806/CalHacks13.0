@@ -63,14 +63,17 @@ const electronAPI = {
   startOverlayNarration: (payload: {
     spokenText: string;
     overlayText: string;
-    durationMs: number;
     captureRegion?: { x: number; y: number; width: number; height: number } | null;
   }) => ipcRenderer.send('start-overlay-narration', payload),
   finishOverlayNarration: () => ipcRenderer.send('finish-overlay-narration'),
+  /** Step `index` of the narration started being heard: the overlay shows that step. */
+  overlayNarrationStep: (index: number) => ipcRenderer.send('overlay-narration-step', index),
+  onOverlayNarrationStep: (callback: (index: number) => void) => {
+    ipcRenderer.on('onOverlayNarrationStep', (_event, index) => callback(index));
+  },
   onOverlayNarrationStart: (callback: (payload: {
     spokenText: string;
     overlayText: string;
-    durationMs: number;
     captureRegion?: { x: number; y: number; width: number; height: number } | null;
   }) => void) => {
     ipcRenderer.on('onOverlayNarrationStart', (_event, payload) => callback(payload));

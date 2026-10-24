@@ -11,6 +11,7 @@ export * from './draw-shape-sanitize.js';
 export * from './stream-tag-parser.js';
 export * from './overlay-text.js';
 export * from './narration-steps.js';
+export * from './step-audio-queue.js';
 export * from './explanation-format.js';
 
 // Privacy
