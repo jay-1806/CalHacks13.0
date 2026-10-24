@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type CSSProperties } from 'react';
 import ChatPanel from './components/ChatPanel';
 import FloatingLauncher from './components/FloatingLauncher';
 import WelcomeOnboarding from './components/WelcomeOnboarding';
@@ -30,12 +30,23 @@ import {
 } from './onboardingStorage';
 
 type BuddyState = 'idle' | 'listening' | 'thinking' | 'responding' | 'pointing' | 'error' | 'privacy';
+
+/** How long the panel takes to shrink back into the launcher (matches .panel-motion.is-closing) */
+const PANEL_EXIT_MS = 200;
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 type PanelView = 'chat' | 'welcome';
 
 export default function App() {
   const [buddyState, setBuddyState] = useState<BuddyState>('idle');
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
   const [panelView, setPanelView] = useState<PanelView>('chat');
+  /** The panel is playing its closing animation; the window shrinks once it ends. */
+  const [isPanelClosing, setIsPanelClosing] = useState(false);
+  /** Where the panel grows from and shrinks into: the launcher, in panel coordinates. */
+  const [panelOrigin, setPanelOrigin] = useState('100% 100%');
   const [welcomeFromHelp, setWelcomeFromHelp] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>(
     () => loadOnboardingRecord().status
@@ -236,6 +247,11 @@ export default function App() {
       if (!placed?.bounds) {
         // Fallback path if placement IPC fails.
         window.electronAPI.setMainSize(PANEL_WIDTH, PANEL_HEIGHT);
+      } else if (placed.anchor) {
+        const { bounds, anchor } = placed;
+        const ox = Math.max(0, Math.min(bounds.width, anchor.cx - bounds.x));
+        const oy = Math.max(0, Math.min(bounds.height, anchor.cy - bounds.y));
+        setPanelOrigin(`${Math.round(ox)}px ${Math.round(oy)}px`);
       }
     } else {
       window.electronAPI.setMainSize(PANEL_WIDTH, PANEL_HEIGHT);
@@ -243,13 +259,20 @@ export default function App() {
 
     if (requestId !== panelLayoutRequestRef.current) return;
     isPanelExpandedRef.current = true;
+    setIsPanelClosing(false);
     setIsPanelExpanded(true);
   };
   expandPanelRef.current = expandPanel;
 
-  const collapsePanel = () => {
-    // Cancel any in-flight expand so a late placeTutorPanel cannot resize after collapse.
-    panelLayoutRequestRef.current += 1;
+  /**
+   * Shrink the panel back into the launcher, then the window. Resolves once the
+   * window is launcher-sized again (e.g. before a screenshot is taken).
+   */
+  const collapsePanel = (): Promise<void> => {
+    // Cancel any in-flight expand so a late placeTutorPanel cannot resize after collapse
+    // (and an expand during the closing animation cancels this collapse).
+    const requestId = ++panelLayoutRequestRef.current;
+    const wasOpen = isPanelExpandedRef.current;
     if (isRecordingRef.current) {
       transcriptionProvider.stopSession().catch(console.error);
       voiceSessionRef.current = 'idle';
@@ -259,13 +282,29 @@ export default function App() {
       window.electronAPI.setDictationGlow(false);
     }
     isPanelExpandedRef.current = false;
-    setIsPanelExpanded(false);
     setCommandMenuOpen(false);
     setCanvasControlsOpen(false);
     commandMenuOpenRef.current = false;
     canvasControlsOpenRef.current = false;
-    // Restore the user-chosen launcher position (panel drag must not change this).
-    resizeBuddyAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
+
+    const finish = () => {
+      if (requestId !== panelLayoutRequestRef.current) return;
+      setIsPanelClosing(false);
+      setIsPanelExpanded(false);
+      // Restore the user-chosen launcher position (panel drag must not change this).
+      resizeBuddyAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
+    };
+    if (!wasOpen || prefersReducedMotion()) {
+      finish();
+      return Promise.resolve();
+    }
+    setIsPanelClosing(true);
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        finish();
+        resolve();
+      }, PANEL_EXIT_MS)
+    );
   };
 
   const persistOnboardingStatus = (status: OnboardingStatus) => {
@@ -466,7 +505,7 @@ export default function App() {
       const transcript = await transcriptionProvider.getFinalTranscript(activeLessonIdRef.current);
       if (transcript && transcript.trim()) {
         startTurn(transcript.trim());
-        hidePanelForAnswer();
+        await hidePanelForAnswer();
         if (!wasHoldDictation) {
           // Open the chat after the explanation, not on top of it.
           panelHiddenForAnswerRef.current = true;
@@ -608,10 +647,10 @@ export default function App() {
   };
 
   /** Tuck the chat away so the learner's attention is on the explanation (and it stays out of the screenshot). */
-  const hidePanelForAnswer = () => {
+  const hidePanelForAnswer = async () => {
     if (!isPanelExpandedRef.current || panelViewRef.current !== 'chat') return;
-    collapsePanel();
     panelHiddenForAnswerRef.current = true;
+    await collapsePanel();
   };
 
   /** Bring the chat back once the explanation is over, or the question failed. */
@@ -715,7 +754,7 @@ export default function App() {
     window.electronAPI.finishOverlayNarration();
     setBuddyState('thinking');
     try {
-      hidePanelForAnswer();
+      await hidePanelForAnswer();
       setIsScanning(true);
       let capBase64: string | undefined;
       let capMeta: ReturnType<typeof getScreenMetadata> | undefined;
@@ -837,48 +876,60 @@ export default function App() {
 
   return (
     <div className={`app-container ${isPanelExpanded ? 'expanded' : 'collapsed'}`}>
-      {isPanelExpanded && panelView === 'welcome' && (
-        <WelcomeOnboarding
-          onGetStarted={handleWelcomeGetStarted}
-          onDismiss={() => handleWelcomeDismiss()}
-          openedFromHelp={welcomeFromHelp}
-        />
-      )}
-      {isPanelExpanded && panelView === 'chat' && (
-        <ChatPanel
-          screenshot={screenshot}
-          onClose={handlePanelClose}
-          response={response}
-          isLoading={isLoading}
-          isStreaming={isStreaming}
-          isResponseReady={isResponseReady}
-          error={error}
-          askQuestion={askQuestion}
-          clearResponse={clearResponse}
-          isRecordingVoice={isRecordingVoice}
-          setIsRecordingVoice={setIsRecordingVoice}
-          isSpeaking={isSpeaking}
-          revealedSpokenText={revealedSpokenText}
-          isMuted={isMuted}
-          setIsMuted={setIsMuted}
-          activeLessonId={activeLessonId}
-          setActiveLessonId={setActiveLessonId}
-          onStartVoiceRecording={startVoiceRecording}
-          onStopVoiceRecording={stopVoiceRecordingAndSubmit}
-          question={question}
-          setQuestion={setQuestion}
-          onResetDemo={handleDemoReset}
-          onAsk={handleAsk}
-          chatTurns={chatTurns}
-          activeTurnId={activeTurnId}
-          startTurn={startTurn}
-          onRestoreExplanation={handleRestoreExplanation}
-          isRegionCapture={!!pendingRegion}
-          isSelectingRegion={isSelectingRegion}
-          onStartRegionSelect={handleStartRegionSelect}
-          onClearRegion={handleClearRegion}
-          focusInputToken={focusInputToken}
-        />
+      {isPanelExpanded && (
+        <div
+          className={`panel-motion${isPanelClosing ? ' is-closing' : ''}`}
+          style={
+            {
+              '--panel-origin': panelOrigin,
+              '--panel-exit-ms': `${PANEL_EXIT_MS}ms`,
+            } as CSSProperties
+          }
+        >
+          {panelView === 'welcome' && (
+            <WelcomeOnboarding
+              onGetStarted={handleWelcomeGetStarted}
+              onDismiss={() => handleWelcomeDismiss()}
+              openedFromHelp={welcomeFromHelp}
+            />
+          )}
+          {panelView === 'chat' && (
+            <ChatPanel
+              screenshot={screenshot}
+              onClose={handlePanelClose}
+              response={response}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              isResponseReady={isResponseReady}
+              error={error}
+              askQuestion={askQuestion}
+              clearResponse={clearResponse}
+              isRecordingVoice={isRecordingVoice}
+              setIsRecordingVoice={setIsRecordingVoice}
+              isSpeaking={isSpeaking}
+              revealedSpokenText={revealedSpokenText}
+              isMuted={isMuted}
+              setIsMuted={setIsMuted}
+              activeLessonId={activeLessonId}
+              setActiveLessonId={setActiveLessonId}
+              onStartVoiceRecording={startVoiceRecording}
+              onStopVoiceRecording={stopVoiceRecordingAndSubmit}
+              question={question}
+              setQuestion={setQuestion}
+              onResetDemo={handleDemoReset}
+              onAsk={handleAsk}
+              chatTurns={chatTurns}
+              activeTurnId={activeTurnId}
+              startTurn={startTurn}
+              onRestoreExplanation={handleRestoreExplanation}
+              isRegionCapture={!!pendingRegion}
+              isSelectingRegion={isSelectingRegion}
+              onStartRegionSelect={handleStartRegionSelect}
+              onClearRegion={handleClearRegion}
+              focusInputToken={focusInputToken}
+            />
+          )}
+        </div>
       )}
       <FloatingLauncher
         state={buddyState}
