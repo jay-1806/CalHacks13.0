@@ -1,0 +1,164 @@
+.dictation-glow-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100000;
+  overflow: hidden;
+}
+
+.dictation-glow-aura {
+  position: absolute;
+  inset: -8%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(99, 102, 241, 0.55),
+    rgba(139, 92, 246, 0.5),
+    rgba(6, 182, 212, 0.55),
+    rgba(59, 130, 246, 0.5),
+    rgba(168, 85, 247, 0.55),
+    rgba(99, 102, 241, 0.55)
+  );
+  filter: blur(48px);
+  opacity: 0.75;
+  animation: dictationAuraSpin 4s linear infinite;
+}
+
+@keyframes dictationAuraSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dictation-glow-edge {
+  position: absolute;
+  pointer-events: none;
+  animation: dictationEdgePulse 1.6s ease-in-out infinite;
+}
+
+.dictation-glow-edge-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 140px;
+  background: linear-gradient(to bottom, rgba(99, 102, 241, 0.45), transparent);
+}
+
+.dictation-glow-edge-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 140px;
+  background: linear-gradient(to top, rgba(6, 182, 212, 0.4), transparent);
+}
+
+.dictation-glow-edge-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 120px;
+  background: linear-gradient(to right, rgba(139, 92, 246, 0.38), transparent);
+}
+
+.dictation-glow-edge-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 120px;
+  background: linear-gradient(to left, rgba(59, 130, 246, 0.38), transparent);
+}
+
+.dictation-glow-corners {
+  position: absolute;
+  inset: 12px;
+  border: 2px solid rgba(165, 180, 252, 0.35);
+  border-radius: 28px;
+  box-shadow:
+    inset 0 0 60px rgba(99, 102, 241, 0.15),
+    0 0 40px rgba(6, 182, 212, 0.2);
+  animation: dictationCornerPulse 2s ease-in-out infinite;
+}
+
+@keyframes dictationEdgePulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes dictationCornerPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    box-shadow:
+      inset 0 0 60px rgba(99, 102, 241, 0.12),
+      0 0 30px rgba(6, 182, 212, 0.15);
+  }
+  50% {
+    opacity: 0.95;
+    box-shadow:
+      inset 0 0 80px rgba(139, 92, 246, 0.22),
+      0 0 55px rgba(6, 182, 212, 0.35);
+  }
+}
+
+.dictation-glow-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: rgba(8, 12, 28, 0.72);
+  border: 1px solid rgba(165, 180, 252, 0.35);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(99, 102, 241, 0.25);
+}
+
+.dictation-glow-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e7ff;
+  letter-spacing: 0.02em;
+}
+
+.dictation-glow-waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+}
+
+.dictation-glow-waveform span {
+  display: block;
+  width: 3px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(to top, #6366f1, #22d3ee);
+  animation: dictationBar 0.9s ease-in-out infinite;
+}
+
+.dictation-glow-waveform span:nth-child(1) { animation-delay: 0s; }
+.dictation-glow-waveform span:nth-child(2) { animation-delay: 0.12s; }
+.dictation-glow-waveform span:nth-child(3) { animation-delay: 0.24s; }
+.dictation-glow-waveform span:nth-child(4) { animation-delay: 0.36s; }
+.dictation-glow-waveform span:nth-child(5) { animation-delay: 0.48s; }
+
+@keyframes dictationBar {
+  0%,
+  100% {
+    height: 6px;
+    opacity: 0.5;
+  }
+  50% {
+    height: 18px;
+    opacity: 1;
+  }
+}

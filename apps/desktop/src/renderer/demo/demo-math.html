@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScreenTutor AI - Math Practice Sheet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f111a;
+      --card-bg: #1a1d2d;
+      --primary: #8b5cf6;
+      --secondary: #ec4899;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+    header {
+      margin-bottom: 40px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      margin: 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid rgba(139, 92, 246, 0.1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(139, 92, 246, 0.3);
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      color: #a78bfa;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+    .math-block {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 1.5rem;
+      text-align: center;
+      margin: 16px 0;
+      font-family: 'Courier New', Courier, monospace;
+      color: #facc15; /* Golden math text */
+      text-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
+    }
+    .instructions {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .graph-placeholder {
+      height: 150px;
+      border: 2px dashed rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: var(--text-muted);
+      position: relative;
+      background: rgba(0, 0, 0, 0.1);
+    }
+    .vertex-dot {
+      width: 10px;
+      height: 10px;
+      background: #ef4444;
+      border-radius: 50%;
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      box-shadow: 0 0 10px #ef4444;
+    }
+    .parabola-line {
+      width: 120px;
+      height: 60px;
+      border: 3px solid #8b5cf6;
+      border-top: none;
+      border-radius: 0 0 60px 60px;
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ScreenTutor AI Practice Workspace</h1>
+      <p class="subtitle">Press <code>Ctrl+Shift+E</code> (<code>Cmd+Shift+E</code> on Mac) and click Buddy to solve any problem here!</p>
+    </header>
+
+    <div class="grid">
+      <!-- Card 1: Distributive -->
+      <div class="card">
+        <h2>1. Distributive Property</h2>
+        <p class="instructions">Expand and solve for the variable x:</p>
+        <div class="math-block">2(x + 3) = 16</div>
+        <p class="instructions">Tip: Type <em>"Explain distribute"</em> or <em>"Explain distributive property"</em> to get help.</p>
+      </div>
+
+      <!-- Card 2: Chain Rule -->
+      <div class="card">
+        <h2>2. Calculus: The Chain Rule</h2>
+        <p class="instructions">Find the derivative of the composed function:</p>
+        <div class="math-block">f(x) = sin(x²)</div>
+        <p class="instructions">Tip: Type <em>"Explain derivative"</em> or <em>"Explain chain rule"</em> to see inner/outer breakdowns.</p>
+      </div>
+
+      <!-- Card 3: U-Substitution -->
+      <div class="card">
+        <h2>3. Calculus: U-Substitution</h2>
+        <p class="instructions">Evaluate the following indefinite integral:</p>
+        <div class="math-block">∫ 2x * cos(x²) dx</div>
+        <p class="instructions">Tip: Type <em>"Explain u-sub"</em> or <em>"Explain integral"</em> to find substitution blocks.</p>
+      </div>
+
+      <!-- Card 4: Graph Vertex -->
+      <div class="card">
+        <h2>4. Graphing & Analysis</h2>
+        <p class="instructions">Identify the vertex point of the parabola:</p>
+        <div class="graph-placeholder">
+          <div class="parabola-line"></div>
+          <div class="vertex-dot"></div>
+          <span>y = x²</span>
+        </div>
+        <p class="instructions">Tip: Type <em>"Explain graph"</em> or <em>"Explain plot"</em> to highlight the vertex point.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

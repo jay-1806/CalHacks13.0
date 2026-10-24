@@ -1,0 +1,122 @@
+.floating-launcher {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+}
+
+.app-container.collapsed .floating-launcher {
+  width: 100%;
+  height: 100%;
+}
+
+.app-container.expanded .floating-launcher {
+  align-self: flex-end;
+  padding: 0 8px 8px;
+}
+
+.launcher-btn {
+  position: relative;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  overflow: visible;
+  line-height: 0;
+  transition: transform 0.2s ease;
+}
+
+.launcher-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.launcher-logo {
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.launcher-btn:hover {
+  transform: scale(1.05);
+}
+
+.launcher-btn:hover .launcher-logo {
+  filter: drop-shadow(0 0 14px rgba(96, 165, 250, 0.45));
+}
+
+.launcher-btn:active {
+  transform: scale(0.97);
+}
+
+.launcher-btn.recording .launcher-logo,
+.launcher-btn.state-listening .launcher-logo {
+  animation: launcher-logo-pulse 1.2s ease-in-out infinite;
+}
+
+.launcher-btn.speaking .launcher-logo,
+.launcher-btn.state-responding .launcher-logo {
+  animation: launcher-logo-pulse-responding 0.9s ease-in-out infinite;
+}
+
+.launcher-btn.state-thinking .launcher-logo {
+  filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.5));
+}
+
+.launcher-btn.state-error .launcher-logo {
+  filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.55));
+}
+
+.launcher-btn.state-privacy .launcher-logo {
+  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.5));
+}
+
+.launcher-activity-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid rgba(96, 165, 250, 0.35);
+  animation: launcher-ring 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes launcher-logo-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.7));
+  }
+}
+
+@keyframes launcher-logo-pulse-responding {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.75));
+  }
+}
+
+@keyframes launcher-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
