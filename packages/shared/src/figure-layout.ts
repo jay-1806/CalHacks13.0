@@ -67,7 +67,7 @@ const WORK_POINT_RADIUS = 0.12;
  * On a working step the pointer rests just left of the line being written, not on
  * top of its first characters, and drops its label: the line says it.
  */
-export function pointBesideWork(events: StreamEvent[], gap = 0.018): StreamEvent[] {
+export function pointBesideWork(events: StreamEvent[], gap = 0.026): StreamEvent[] {
   const work = events.find((e) => e.type === 'draw' && e.shape.kind === 'work');
   if (!work || work.type !== 'draw') return events;
   const [wx, wy] = work.shape.coords;

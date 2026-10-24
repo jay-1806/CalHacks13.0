@@ -1,21 +1,48 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ChatPanel from './components/ChatPanel';
 import FloatingLauncher from './components/FloatingLauncher';
+import WelcomeOnboarding from './components/WelcomeOnboarding';
 import { useScreenCapture, getScreenMetadata } from './hooks/useScreenCapture';
 import { useTutor } from './hooks/useTutor';
 import { useChatHistory } from './hooks/useChatHistory';
-import { buildNarrationSteps, estimateStepDurationMs } from '@screentutor/shared';
+import {
+  buildNarrationSteps,
+  canOpenGettingStartedFromHelp,
+  estimateStepDurationMs,
+  nextStatusAfterDismiss,
+  nextStatusAfterGetStarted,
+  shouldAutoShowOnboarding,
+  shouldDeferOnboardingAutoShow,
+  shouldMarkDismissOnWelcomeMinimize,
+  type OnboardingStatus,
+} from '@screentutor/shared';
 import { transcriptionProvider } from './api/transcription';
 import { playSilently, ttsProvider, type NarrationHandlers } from './api/tts';
 import { performanceTracker } from './sentry';
-import { PANEL_WIDTH, PANEL_HEIGHT, COLLAPSED_SIZE } from './panelLayout';
+import { PANEL_WIDTH, PANEL_HEIGHT, COLLAPSED_SIZE, MENU_WINDOW_SIZE } from './panelLayout';
 import type { StoredExplanation } from './types/explanation';
+import {
+  hasAttemptedSessionAutoShow,
+  loadOnboardingRecord,
+  markSessionAutoShowAttempted,
+  resetOnboardingPreference,
+  saveOnboardingStatus,
+} from './onboardingStorage';
 
 type BuddyState = 'idle' | 'listening' | 'thinking' | 'responding' | 'pointing' | 'error' | 'privacy';
+type PanelView = 'chat' | 'welcome';
 
 export default function App() {
   const [buddyState, setBuddyState] = useState<BuddyState>('idle');
   const [isPanelExpanded, setIsPanelExpanded] = useState(false);
+  const [panelView, setPanelView] = useState<PanelView>('chat');
+  const [welcomeFromHelp, setWelcomeFromHelp] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>(
+    () => loadOnboardingRecord().status
+  );
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
+  const [canvasControlsOpen, setCanvasControlsOpen] = useState(false);
+  const [focusInputToken, setFocusInputToken] = useState(0);
   const [question, setQuestion] = useState('');
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -31,7 +58,16 @@ export default function App() {
   const screenshotForQuestionRef = useRef(screenshotForQuestion);
   screenshotForQuestionRef.current = screenshotForQuestion;
   const { askQuestion, response, isLoading, isStreaming, isResponseReady, error, clearResponse } = useTutor();
-  const { turns: chatTurns, activeTurnId, startTurn, resetTurns, syncActiveTurn, updateTurnExplanation, setTurnExplanation } = useChatHistory();
+  const {
+    turns: chatTurns,
+    activeTurnId,
+    startTurn,
+    resetTurns,
+    failActiveTurn,
+    syncActiveTurn,
+    updateTurnExplanation,
+    setTurnExplanation,
+  } = useChatHistory();
   const [isScanning, setIsScanning] = useState(false);
 
   const activeLessonIdRef = useRef(activeLessonId);
@@ -52,6 +88,17 @@ export default function App() {
   const silentNarrationRef = useRef<(() => void) | null>(null);
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
+  /** Invalidates in-flight placeTutorPanel / expand work on collapse or rapid re-open. */
+  const panelLayoutRequestRef = useRef(0);
+  const panelViewRef = useRef<PanelView>(panelView);
+  const onboardingStatusRef = useRef(onboardingStatus);
+  const wasExpandedBeforeWelcomeRef = useRef(false);
+  const isLoadingRef = useRef(isLoading);
+  const isStreamingRef = useRef(isStreaming);
+  const isSpeakingRef = useRef(isSpeaking);
+  const isScanningRef = useRef(isScanning);
+  const isSelectingRegionRef = useRef(isSelectingRegion);
+  const chatTurnsRef = useRef(chatTurns);
 
   useEffect(() => {
     activeLessonIdRef.current = activeLessonId;
@@ -59,11 +106,68 @@ export default function App() {
     isRecordingRef.current = isRecordingVoice;
     isPanelExpandedRef.current = isPanelExpanded;
     activeTurnIdRef.current = activeTurnId;
-  }, [activeLessonId, screenshot, isRecordingVoice, isPanelExpanded, activeTurnId]);
+    panelViewRef.current = panelView;
+    onboardingStatusRef.current = onboardingStatus;
+    isLoadingRef.current = isLoading;
+    isStreamingRef.current = isStreaming;
+    isSpeakingRef.current = isSpeaking;
+    isScanningRef.current = isScanning;
+    isSelectingRegionRef.current = isSelectingRegion;
+    chatTurnsRef.current = chatTurns;
+  }, [
+    activeLessonId,
+    screenshot,
+    isRecordingVoice,
+    isPanelExpanded,
+    activeTurnId,
+    panelView,
+    onboardingStatus,
+    isLoading,
+    isStreaming,
+    isSpeaking,
+    isScanning,
+    isSelectingRegion,
+    chatTurns,
+  ]);
+
+  useEffect(() => {
+    // Dev-only helper (electron-vite localhost). Never expose in packaged builds.
+    if (typeof window === 'undefined') return;
+    const host = window.location?.hostname;
+    const isDevRenderer = host === 'localhost' || host === '127.0.0.1';
+    if (!isDevRenderer) return;
+    const w = window as Window & { __quickyResetOnboarding?: () => void };
+    w.__quickyResetOnboarding = () => {
+      resetOnboardingPreference();
+      setOnboardingStatus('never');
+      console.info(
+        '[Quicky.AI] Onboarding keys only were reset (mute and other prefs preserved). Reload to see welcome.'
+      );
+    };
+    return () => {
+      delete w.__quickyResetOnboarding;
+    };
+  }, []);
+
+  const getBusyFlags = useCallback(() => {
+    const active = chatTurnsRef.current.find((t) => t.id === activeTurnIdRef.current);
+    const isConversationBusy = active != null && !['done', 'error'].includes(active.aiPhase);
+    return {
+      isRecordingVoice: isRecordingRef.current,
+      isSelectingRegion: isSelectingRegionRef.current,
+      isLoading: isLoadingRef.current,
+      isStreaming: isStreamingRef.current,
+      isSpeaking: isSpeakingRef.current,
+      isScanning: isScanningRef.current,
+      isConversationBusy,
+    };
+  }, []);
+
+  const expandPanelRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (screenshot?.isRegionCapture && screenshot.base64 && !isPanelExpandedRef.current) {
-      expandPanel();
+      void expandPanelRef.current();
     }
   }, [screenshot?.isRegionCapture, screenshot?.base64]);
 
@@ -96,13 +200,53 @@ export default function App() {
     return () => clearTimeout(fallback);
   }, [isResponseReady, isSpeaking, isMuted, response]);
 
-  const expandPanel = () => {
-    setIsPanelExpanded(true);
+  const commandMenuOpenRef = useRef(commandMenuOpen);
+  const canvasControlsOpenRef = useRef(canvasControlsOpen);
+  commandMenuOpenRef.current = commandMenuOpen;
+  canvasControlsOpenRef.current = canvasControlsOpen;
+
+  const resizeBuddyAtAnchor = (width: number, height: number) => {
     window.electronAPI.setIgnoreMouseEvents(false);
-    window.electronAPI.setMainSize(PANEL_WIDTH, PANEL_HEIGHT);
+    if (typeof window.electronAPI.setMainSizeAtAnchor === 'function') {
+      window.electronAPI.setMainSizeAtAnchor(width, height);
+    } else {
+      window.electronAPI.setMainSize(width, height);
+    }
   };
 
+  const expandPanel = async () => {
+    const requestId = ++panelLayoutRequestRef.current;
+    setCommandMenuOpen(false);
+    setCanvasControlsOpen(false);
+    commandMenuOpenRef.current = false;
+    canvasControlsOpenRef.current = false;
+    window.electronAPI.setIgnoreMouseEvents(false);
+
+    // Apply final buddy bounds before mounting the panel — avoids a corner flash.
+    if (typeof window.electronAPI.placeTutorPanel === 'function') {
+      const placed = await window.electronAPI.placeTutorPanel({
+        width: PANEL_WIDTH,
+        height: PANEL_HEIGHT,
+        requestId,
+      });
+      if (requestId !== panelLayoutRequestRef.current) return;
+      if (!placed?.bounds) {
+        // Fallback path if placement IPC fails.
+        window.electronAPI.setMainSize(PANEL_WIDTH, PANEL_HEIGHT);
+      }
+    } else {
+      window.electronAPI.setMainSize(PANEL_WIDTH, PANEL_HEIGHT);
+    }
+
+    if (requestId !== panelLayoutRequestRef.current) return;
+    isPanelExpandedRef.current = true;
+    setIsPanelExpanded(true);
+  };
+  expandPanelRef.current = expandPanel;
+
   const collapsePanel = () => {
+    // Cancel any in-flight expand so a late placeTutorPanel cannot resize after collapse.
+    panelLayoutRequestRef.current += 1;
     if (isRecordingRef.current) {
       transcriptionProvider.stopSession().catch(console.error);
       voiceSessionRef.current = 'idle';
@@ -111,16 +255,133 @@ export default function App() {
       holdDictationRef.current = false;
       window.electronAPI.setDictationGlow(false);
     }
+    isPanelExpandedRef.current = false;
     setIsPanelExpanded(false);
-    window.electronAPI.setMainSize(COLLAPSED_SIZE, COLLAPSED_SIZE);
+    setCommandMenuOpen(false);
+    setCanvasControlsOpen(false);
+    commandMenuOpenRef.current = false;
+    canvasControlsOpenRef.current = false;
+    // Restore the user-chosen launcher position (panel drag must not change this).
+    resizeBuddyAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
   };
 
-  const togglePanel = () => {
-    if (isPanelExpandedRef.current) {
-      collapsePanel();
-    } else {
-      handleOpenPanel();
+  const persistOnboardingStatus = (status: OnboardingStatus) => {
+    saveOnboardingStatus(status);
+    onboardingStatusRef.current = status;
+    setOnboardingStatus(status);
+  };
+
+  const openWelcome = async (fromHelp: boolean) => {
+    if (panelViewRef.current === 'welcome') return;
+    wasExpandedBeforeWelcomeRef.current = isPanelExpandedRef.current;
+    setWelcomeFromHelp(fromHelp);
+    setPanelView('welcome');
+    panelViewRef.current = 'welcome';
+    console.info(`[Quicky.AI] Welcome onboarding (${fromHelp ? 'help' : 'first-launch'})`);
+    if (!isPanelExpandedRef.current) {
+      await expandPanel();
     }
+  };
+
+  const handleWelcomeGetStarted = () => {
+    const next = nextStatusAfterGetStarted(onboardingStatusRef.current);
+    persistOnboardingStatus(next);
+    setWelcomeFromHelp(false);
+    setPanelView('chat');
+    panelViewRef.current = 'chat';
+    // Stay expanded — enter real Text composer and focus it.
+    if (!isPanelExpandedRef.current) {
+      void expandPanel().then(() => {
+        if (isPanelExpandedRef.current) setFocusInputToken((n) => n + 1);
+      });
+    } else {
+      setFocusInputToken((n) => n + 1);
+    }
+  };
+
+  const handleWelcomeDismiss = (options?: { fromMinimize?: boolean }) => {
+    const current = onboardingStatusRef.current;
+    // Explicit first-run dismissal (Not now or minimize) so the guide does not reappear.
+    if (current === 'never' || (options?.fromMinimize && shouldMarkDismissOnWelcomeMinimize(current))) {
+      persistOnboardingStatus(nextStatusAfterDismiss(current));
+    }
+
+    const restoreExpanded = welcomeFromHelp && wasExpandedBeforeWelcomeRef.current && !options?.fromMinimize;
+    setWelcomeFromHelp(false);
+    setPanelView('chat');
+    panelViewRef.current = 'chat';
+
+    if (!restoreExpanded) {
+      collapsePanel();
+    }
+    // Help reopen while chat was already open — return to chat, keep draft/history.
+  };
+
+  const handlePanelClose = () => {
+    if (panelViewRef.current === 'welcome') {
+      handleWelcomeDismiss({ fromMinimize: true });
+      return;
+    }
+    collapsePanel();
+  };
+
+  // First-launch auto welcome (once per session; deferred while tutoring is busy).
+  useEffect(() => {
+    if (!shouldAutoShowOnboarding(onboardingStatus)) return;
+    if (hasAttemptedSessionAutoShow()) return;
+    if (panelView === 'welcome') return;
+    if (shouldDeferOnboardingAutoShow(getBusyFlags())) return;
+
+    markSessionAutoShowAttempted();
+    void openWelcome(false);
+  }, [
+    onboardingStatus,
+    panelView,
+    isRecordingVoice,
+    isSelectingRegion,
+    isLoading,
+    isStreaming,
+    isSpeaking,
+    isScanning,
+    chatTurns,
+    activeTurnId,
+    getBusyFlags,
+  ]);
+
+  // Help → Getting Started (listener registered once; handlers read current refs).
+  useEffect(() => {
+    if (typeof window.electronAPI?.onOpenGettingStarted !== 'function') return;
+    window.electronAPI.onOpenGettingStarted(() => {
+      if (panelViewRef.current === 'welcome') return;
+      if (!canOpenGettingStartedFromHelp(getBusyFlags())) {
+        console.info('[Quicky.AI] Getting Started deferred — tutoring is active.');
+        return;
+      }
+      void openWelcome(true);
+    });
+  }, [getBusyFlags]);
+
+  /**
+   * Canvas sheet still uses a square overlay window.
+   * Command menu bounds are set by FloatingLauncher via setMainBounds (arc-aware)
+   * so we must not overwrite them with a centered square here.
+   */
+  useEffect(() => {
+    if (isPanelExpanded) return;
+    if (commandMenuOpen) return;
+    if (canvasControlsOpen) {
+      resizeBuddyAtAnchor(MENU_WINDOW_SIZE, MENU_WINDOW_SIZE);
+    }
+  }, [commandMenuOpen, canvasControlsOpen, isPanelExpanded]);
+
+  const handleMenuExitComplete = () => {
+    if (isPanelExpandedRef.current) return;
+    if (commandMenuOpenRef.current || canvasControlsOpenRef.current) return;
+    resizeBuddyAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
+  };
+
+  const handleMenuOpenChange = (open: boolean) => {
+    setCommandMenuOpen(open);
   };
 
   const startVoiceRecording = async (options?: { showGlow?: boolean; fromHoldHotkey?: boolean }) => {
@@ -129,6 +390,23 @@ export default function App() {
     const isPrivacy = await window.electronAPI.getPrivacyMode();
     if (isPrivacy) {
       setBuddyState('privacy');
+      return;
+    }
+
+    // Permission request is deliberate and Voice-only (never at startup / onboarding).
+    try {
+      const status =
+        typeof window.electronAPI.ensureMicrophoneAccess === 'function'
+          ? await window.electronAPI.ensureMicrophoneAccess()
+          : await window.electronAPI.getPermissionStatus();
+      if (status.microphone === 'denied' || status.microphone === 'restricted') {
+        console.warn('[Quicky.AI] Microphone permission denied — voice not started');
+        setBuddyState('error');
+        return;
+      }
+    } catch (err) {
+      console.error('Microphone permission check failed:', err);
+      setBuddyState('error');
       return;
     }
 
@@ -185,7 +463,7 @@ export default function App() {
       const transcript = await transcriptionProvider.getFinalTranscript(activeLessonIdRef.current);
       if (transcript && transcript.trim()) {
         if (!wasHoldDictation && !isPanelExpandedRef.current) {
-          expandPanel();
+          void expandPanel();
         }
         startTurn(transcript.trim());
         setIsScanning(true);
@@ -196,6 +474,7 @@ export default function App() {
           const capData = await screenshotForQuestionRef.current();
           setIsScanning(false);
           if (!capData) {
+            failActiveTurn('Screen capture was blocked or unavailable.');
             setBuddyState('privacy');
             return;
           }
@@ -222,8 +501,15 @@ export default function App() {
   stopVoiceRecordingRef.current = stopVoiceRecordingAndSubmit;
 
   useEffect(() => {
+    // Skip when Vite serves this module outside Electron (e.g. IDE browser on :5173).
+    if (typeof window.electronAPI?.setIgnoreMouseEvents !== 'function') return;
+
     window.electronAPI.setIgnoreMouseEvents(false);
-    window.electronAPI.setMainSize(COLLAPSED_SIZE, COLLAPSED_SIZE);
+    if (typeof window.electronAPI.setMainSizeAtAnchor === 'function') {
+      window.electronAPI.setMainSizeAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
+    } else {
+      window.electronAPI.setMainSize(COLLAPSED_SIZE, COLLAPSED_SIZE);
+    }
 
     window.electronAPI.onHoldDictationStart(async () => {
       if (voiceSessionRef.current !== 'idle') return;
@@ -251,6 +537,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (typeof window.electronAPI?.onExplanationReady !== 'function') return;
+
     window.electronAPI.onExplanationReady((data) => {
       const turnId = activeTurnIdRef.current;
       if (!turnId) return;
@@ -412,6 +700,7 @@ export default function App() {
         setIsScanning(false);
 
         if (!capData) {
+          failActiveTurn('Screen capture was blocked or unavailable.');
           setBuddyState('privacy');
           performanceTracker.endSpan('total_interaction_latency');
           return;
@@ -434,6 +723,10 @@ export default function App() {
   };
 
   const handleStartRegionSelect = async () => {
+    commandMenuOpenRef.current = false;
+    canvasControlsOpenRef.current = false;
+    setCommandMenuOpen(false);
+    setCanvasControlsOpen(false);
     if (isPanelExpandedRef.current) {
       collapsePanel();
     }
@@ -442,6 +735,39 @@ export default function App() {
 
   const handleClearRegion = () => {
     clearScreenshot();
+  };
+
+  const handleMenuVoice = () => {
+    setCommandMenuOpen(false);
+    setCanvasControlsOpen(false);
+    setPanelView('chat');
+    panelViewRef.current = 'chat';
+    // Open the tutor panel so the existing hold-to-talk mic remains the recording UX.
+    void expandPanel();
+  };
+
+  const handleMenuCapture = async () => {
+    await handleStartRegionSelect();
+  };
+
+  const handleMenuText = () => {
+    setCommandMenuOpen(false);
+    setCanvasControlsOpen(false);
+    // Text always enters the real composer (never the welcome sheet).
+    setPanelView('chat');
+    panelViewRef.current = 'chat';
+    void expandPanel().then(() => {
+      if (isPanelExpandedRef.current) {
+        setFocusInputToken((n) => n + 1);
+      }
+    });
+  };
+
+  const handleMenuCanvas = () => {
+    commandMenuOpenRef.current = false;
+    canvasControlsOpenRef.current = true;
+    setCommandMenuOpen(false);
+    setCanvasControlsOpen(true);
   };
 
   const handleDemoReset = async () => {
@@ -461,23 +787,6 @@ export default function App() {
     setBuddyState('idle');
   };
 
-  const handleOpenPanel = async () => {
-    performanceTracker.startSpan('total_interaction_latency');
-    performanceTracker.startSpan('hotkey_to_listening');
-
-    expandPanel();
-
-    const isPrivacy = await window.electronAPI.getPrivacyMode();
-    if (isPrivacy) {
-      setBuddyState('privacy');
-      performanceTracker.endSpan('hotkey_to_listening');
-      return;
-    }
-
-    setBuddyState('listening');
-    performanceTracker.endSpan('hotkey_to_listening');
-  };
-
   const handleRestoreExplanation = (turnId: string, explanation: StoredExplanation) => {
     if (!explanation.text) return;
 
@@ -492,16 +801,23 @@ export default function App() {
     updateTurnExplanation(turnId, { visible: true });
 
     if (!isPanelExpandedRef.current) {
-      expandPanel();
+      void expandPanel();
     }
   };
 
   return (
     <div className={`app-container ${isPanelExpanded ? 'expanded' : 'collapsed'}`}>
-      {isPanelExpanded && (
+      {isPanelExpanded && panelView === 'welcome' && (
+        <WelcomeOnboarding
+          onGetStarted={handleWelcomeGetStarted}
+          onDismiss={() => handleWelcomeDismiss()}
+          openedFromHelp={welcomeFromHelp}
+        />
+      )}
+      {isPanelExpanded && panelView === 'chat' && (
         <ChatPanel
           screenshot={screenshot}
-          onClose={collapsePanel}
+          onClose={handlePanelClose}
           response={response}
           isLoading={isLoading}
           isStreaming={isStreaming}
@@ -531,14 +847,30 @@ export default function App() {
           isSelectingRegion={isSelectingRegion}
           onStartRegionSelect={handleStartRegionSelect}
           onClearRegion={handleClearRegion}
+          focusInputToken={focusInputToken}
         />
       )}
       <FloatingLauncher
         state={buddyState}
         isExpanded={isPanelExpanded}
-        onToggle={togglePanel}
         isRecordingVoice={isRecordingVoice}
         isSpeaking={isSpeaking}
+        menuOpen={commandMenuOpen}
+        onMenuOpenChange={handleMenuOpenChange}
+        onMenuExitComplete={handleMenuExitComplete}
+        onCollapsePanel={handlePanelClose}
+        onVoice={handleMenuVoice}
+        onCapture={handleMenuCapture}
+        onText={handleMenuText}
+        onCanvas={handleMenuCanvas}
+        canvasControlsOpen={canvasControlsOpen}
+        onCanvasControlsClose={() => {
+          setCanvasControlsOpen(false);
+          if (!commandMenuOpenRef.current && !isPanelExpandedRef.current) {
+            resizeBuddyAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
+          }
+        }}
+        onClearAnnotations={() => window.electronAPI.clearOverlay()}
       />
     </div>
   );

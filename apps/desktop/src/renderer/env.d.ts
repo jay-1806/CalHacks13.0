@@ -4,6 +4,7 @@ declare global {
   interface ElectronAPI {
     platform: string;
     getPermissionStatus: () => Promise<{ platform: string; screen: string; microphone: string }>;
+    ensureMicrophoneAccess: () => Promise<{ platform: string; screen: string; microphone: string }>;
     openPermissionSettings: (kind: 'screen' | 'microphone') => void;
     captureScreen: () => Promise<any>;
     startRegionSelect: () => Promise<{ ok: boolean; reason?: string }>;
@@ -33,6 +34,40 @@ declare global {
     onExplanationMinimized: (callback: (payload: { anchorX: number; anchorY: number; dragOffsetX: number; dragOffsetY: number; text: string }) => void) => void;
     onExplanationUpdated: (callback: (payload: { anchorX: number; anchorY: number; dragOffsetX: number; dragOffsetY: number; text: string }) => void) => void;
     setMainSize: (width: number, height: number) => void;
+    setMainSizeAtAnchor: (width: number, height: number) => void;
+    placeTutorPanel: (payload: {
+      width: number;
+      height: number;
+      requestId: number;
+    }) => Promise<{
+      bounds: { x: number; y: number; width: number; height: number } | null;
+      anchor: { cx: number; cy: number };
+      epoch: number;
+      requestId: number | null;
+    } | null>;
+    setMainBounds: (bounds: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) => Promise<{ x: number; y: number; width: number; height: number } | null>;
+    moveMainWindow: (x: number, y: number) => void;
+    getMainBounds: () => Promise<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      workArea: { x: number; y: number; width: number; height: number };
+      anchor: { cx: number; cy: number };
+    } | null>;
+    getWindowInventory: () => Promise<
+      Array<{
+        id: number;
+        role: 'buddy' | 'overlay' | 'other';
+        visible: boolean;
+        bounds: { x: number; y: number; width: number; height: number };
+      }>
+    >;
     startOverlayNarration: (payload: {
       spokenText: string;
       overlayText: string;
@@ -56,6 +91,7 @@ declare global {
     onCursorMove: (callback: (point: { x: number; y: number }) => void) => void;
     onFlyToPoint: (callback: (point: { x: number; y: number }) => void) => void;
     logToServer: (message: string) => void;
+    onOpenGettingStarted: (callback: () => void) => void;
   }
 
   interface Window {

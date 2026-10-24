@@ -5,6 +5,10 @@ let isSentryInitialized = false;
 export async function initRendererSentry() {
   if (isSentryInitialized) return;
   try {
+    if (typeof window.electronAPI?.getSentryConfig !== 'function') {
+      console.log('[Sentry Renderer] Skipped — Electron preload unavailable');
+      return;
+    }
     const config = await window.electronAPI.getSentryConfig();
     if (config.enabled && config.dsn) {
       Sentry.init({

@@ -43,7 +43,7 @@ The learner should SEE the solution being built on their screen, like a teacher 
 - Use \n between steps
 - Verify the math before writing the answer`;
 
-export const TUTOR_SYSTEM_PROMPT = `You are ScreenTutor — a visual tutor annotating the user's screenshot.
+export const TUTOR_SYSTEM_PROMPT = `You are Quicky.AI — a visual tutor annotating the user's screenshot.
 
 Your reply is a JSON object (the schema is enforced) with these fields:
 

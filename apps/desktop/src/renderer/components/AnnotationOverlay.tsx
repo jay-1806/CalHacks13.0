@@ -9,6 +9,8 @@ import {
   buildNarrationSteps,
   figureCenter,
   placeBesideFigure,
+  ANNOTATION_POINTER,
+  pointInRect,
   type CaptureRegion,
   type CanvasDrawShape,
   type StreamEvent,
@@ -33,7 +35,7 @@ const MOVE_DURATION_MS = 350;
 const FADE_IN_MS = 200;
 const MAX_QUEUE_DEPTH = 50;
 const CHAR_STREAM_MS = 30;
-const TRAIL_LENGTH = 6;
+const TRAIL_LENGTH = ANNOTATION_POINTER.trailMax + 2;
 /** Opacity of earlier steps' diagram marks: the current step stands out, earlier ones stay readable */
 const FADED_SHAPE_ALPHA = 0.6;
 /** How long a finished explanation stays on screen before it fades away */
@@ -380,6 +382,25 @@ export default function AnnotationOverlay() {
     return shapesRef.current.map((active) => shapeBounds(ctx, active.shape, W, H));
   };
 
+  /** Nearest active mark footprint under/near the pointer — used to keep the tip off content. */
+  const contentNearPointer = (px: number, py: number, W: number, H: number): Rect | null => {
+    const obstacles = shapeObstacles(W, H);
+    let best: Rect | null = null;
+    let bestDist = Infinity;
+    for (const r of obstacles) {
+      if (r.w < 2 && r.h < 2) continue;
+      const cx = r.x + r.w / 2;
+      const cy = r.y + r.h / 2;
+      const inside = pointInRect(px, py, r, 10);
+      const dist = inside ? 0 : Math.hypot(px - cx, py - cy);
+      if (dist < bestDist && (inside || dist < Math.max(r.w, r.h) * 0.9 + 48)) {
+        best = r;
+        bestDist = dist;
+      }
+    }
+    return best;
+  };
+
   const persistExplanation = useCallback((visible: boolean) => {
     const current = pointRef.current;
     if (!current?.pointTarget || current.pointTarget.x === null || current.pointTarget.y === null) return;
@@ -460,19 +481,32 @@ export default function AnnotationOverlay() {
     trailRef.current = trailRef.current.filter((pt) => pt.age < TRAIL_LENGTH);
 
     if (!minimized && currentPoint?.pointTarget.x !== null && currentPoint?.pointTarget.y !== null) {
+      const px = pointerPosRef.current.x;
+      const py = pointerPosRef.current.y;
+      const near = contentNearPointer(px, py, W, H);
+      const obstacles = shapeObstacles(W, H).filter((r) => r !== near);
       drawEnhancedPointer(
         ctx,
-        pointerPosRef.current.x,
-        pointerPosRef.current.y,
+        px,
+        py,
         timestamp,
         pointerLabel,
         trailRef.current,
         arrivalBurstRef.current &&
-          timestamp - arrivalBurstRef.current.startTime < 400
+          timestamp - arrivalBurstRef.current.startTime < ANNOTATION_POINTER.burstMs
           ? arrivalBurstRef.current
-          : null
+          : null,
+        {
+          contentBounds: near,
+          obstacles,
+          viewportW: W,
+          viewportH: H,
+        }
       );
-      if (arrivalBurstRef.current && timestamp - arrivalBurstRef.current.startTime >= 400) {
+      if (
+        arrivalBurstRef.current &&
+        timestamp - arrivalBurstRef.current.startTime >= ANNOTATION_POINTER.burstMs
+      ) {
         arrivalBurstRef.current = null;
       }
     }

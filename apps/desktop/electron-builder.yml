@@ -1,5 +1,6 @@
+# Internal appId preserved so macOS permissions / Keychain / prior installs stay linked.
 appId: ai.screentutor.desktop
-productName: ScreenTutor AI
+productName: Quicky.AI
 directories:
   output: release
   buildResources: build
@@ -11,6 +12,7 @@ asarUnpack:
   - '**/node_modules/koffi/**'
 mac:
   category: public.app-category.education
+  icon: build/icon.icns
   target:
     - target: dmg
       arch: [arm64, x64]
@@ -19,7 +21,8 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSMicrophoneUsageDescription: ScreenTutor AI listens while you hold the hotkey so you can ask questions by voice.
-    NSScreenCaptureUsageDescription: ScreenTutor AI captures your screen only when you ask, so it can explain what you are looking at.
+    NSMicrophoneUsageDescription: Quicky.AI listens while you hold the hotkey so you can ask questions by voice.
+    NSScreenCaptureUsageDescription: Quicky.AI captures your screen only when you ask, so it can explain what you are looking at.
 win:
+  icon: build/icon.ico
   target: nsis

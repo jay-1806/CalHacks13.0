@@ -1,7 +1,13 @@
-import { patchConsole, mapNormalizedToDisplayLocal } from '@screentutor/shared';
+import {
+  patchConsole,
+  mapNormalizedToDisplayLocal,
+  computeTutorPanelBounds,
+  PRODUCT_DISPLAY_NAME,
+  PRODUCT_USER_DATA_DIR,
+} from '@screentutor/shared';
 patchConsole();
 
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen } from 'electron';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import {
@@ -22,6 +28,42 @@ import { initSentry } from './sentry.js';
 
 // Initialize Sentry crash reporting
 initSentry();
+
+/**
+ * Official display name is Quicky.AI. Lock userData to the existing
+ * `@screentutor/desktop` directory BEFORE setName so preferences / session
+ * storage are not orphaned by the rebrand.
+ */
+const preservedUserData = join(app.getPath('appData'), PRODUCT_USER_DATA_DIR);
+app.setPath('userData', preservedUserData);
+app.setName(PRODUCT_DISPLAY_NAME);
+
+/**
+ * One Quicky.AI desktop process at a time.
+ * Duplicate `pnpm dev` / leftover Electron mains were rendering two visible launchers.
+ */
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+function resolveAppIconPath(): string {
+  // electron-vite main → out/main; build resources live at apps/desktop/build
+  return join(__dirname, '../../build/icon.png');
+}
+
+function applyNativeAppIcon() {
+  const iconPath = resolveAppIconPath();
+  const image = nativeImage.createFromPath(iconPath);
+  if (image.isEmpty()) {
+    console.warn('[Main] Quicky.AI icon missing or unreadable:', iconPath);
+    return null;
+  }
+  if (isMac && app.dock) {
+    app.dock.setIcon(image);
+  }
+  return image;
+}
 
 let mainWindow: BrowserWindow;
 let overlayWindow: BrowserWindow;
@@ -56,28 +98,127 @@ function endRegionSelect() {
 }
 
 const TOPMOST_LEVEL = 'screen-saver' as const;
-const PANEL_WIDTH = 380;
-const PANEL_HEIGHT = 580;
+const PANEL_WIDTH = 420;
+const PANEL_HEIGHT = 620;
+/** Keep in sync with renderer panelLayout.COLLAPSED_SIZE. */
 const COLLAPSED_SIZE = 96;
 const WINDOW_MARGIN = 16;
 
-function positionPanel(width: number, height: number) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const display = screen.getPrimaryDisplay();
-  const { x, y, width: workW, height: workH } = display.workArea;
+/** Session-persisted launcher center in screen coordinates (free placement). */
+let launcherAnchor: { cx: number; cy: number } | null = null;
 
+function workAreaNear(px: number, py: number) {
+  return screen.getDisplayNearestPoint({ x: Math.round(px), y: Math.round(py) }).workArea;
+}
+
+function defaultLauncherAnchor() {
+  const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
+  return {
+    cx: x + width - WINDOW_MARGIN - COLLAPSED_SIZE / 2,
+    cy: y + height - WINDOW_MARGIN - COLLAPSED_SIZE / 2,
+  };
+}
+
+function ensureLauncherAnchor() {
+  if (!launcherAnchor) launcherAnchor = defaultLauncherAnchor();
+  return launcherAnchor;
+}
+
+function clampOrigin(x: number, y: number, width: number, height: number, work: Electron.Rectangle) {
+  const maxX = work.x + Math.max(0, work.width - width);
+  const maxY = work.y + Math.max(0, work.height - height);
+  return {
+    x: Math.min(Math.max(Math.round(x), work.x), maxX),
+    y: Math.min(Math.max(Math.round(y), work.y), maxY),
+  };
+}
+
+/**
+ * Place the tutor panel near the saved launcher anchor (does not mutate the anchor).
+ * Replaces the old primary-display bottom-right dock.
+ */
+function positionPanelNearLauncher(width: number, height: number) {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
   const winWidth = width;
   const winHeight = height > 0 ? height : width;
-
+  const anchor = ensureLauncherAnchor();
+  const work = workAreaNear(anchor.cx, anchor.cy);
+  const placed = computeTutorPanelBounds({
+    launcherCenter: anchor,
+    launcherSize: COLLAPSED_SIZE,
+    panelWidth: winWidth,
+    panelHeight: winHeight,
+    workArea: work,
+    gap: 16,
+  });
   mainWindow.setBounds(
-    {
-      x: x + workW - winWidth - WINDOW_MARGIN,
-      y: y + workH - winHeight - WINDOW_MARGIN,
-      width: winWidth,
-      height: winHeight,
-    },
-    true
+    { x: placed.x, y: placed.y, width: placed.width, height: placed.height },
+    false
   );
+  return mainWindow.getBounds();
+}
+
+/** Monotonic token so stale expand/collapse IPC cannot fight the latest layout. */
+let buddyBoundsEpoch = 0;
+
+/**
+ * Resize the buddy window around the saved launcher anchor.
+ * Never overwrites the user-chosen anchor — clamping may nudge the compact
+ * window at screen edges, but the remembered desktop position stays put.
+ */
+function setMainSizeAtAnchor(width: number, height: number) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const winWidth = width;
+  const winHeight = height > 0 ? height : width;
+  const anchor = ensureLauncherAnchor();
+  const work = workAreaNear(anchor.cx, anchor.cy);
+  const origin = clampOrigin(anchor.cx - winWidth / 2, anchor.cy - winHeight / 2, winWidth, winHeight, work);
+  mainWindow.setBounds({ ...origin, width: winWidth, height: winHeight }, false);
+}
+
+/** Exact buddy bounds from the renderer (arc-aware). Does not move the launcher anchor. */
+function setMainBoundsExact(x: number, y: number, width: number, height: number) {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  if (![x, y, width, height].every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  const work = workAreaNear(x + w / 2, y + h / 2);
+  const origin = clampOrigin(x, y, w, h, work);
+  mainWindow.setBounds({ ...origin, width: w, height: h }, false);
+  return mainWindow.getBounds();
+}
+
+function moveMainWindow(x: number, y: number) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const bounds = mainWindow.getBounds();
+  const work = workAreaNear(x + bounds.width / 2, y + bounds.height / 2);
+  const origin = clampOrigin(x, y, bounds.width, bounds.height, work);
+  mainWindow.setBounds({ ...origin, width: bounds.width, height: bounds.height }, false);
+  // Expanded tutor panel moves freely; only the compact launcher updates the persistent anchor.
+  const isTutorPanel = bounds.width >= 300 && bounds.height >= 400;
+  if (!isTutorPanel) {
+    launcherAnchor = {
+      cx: origin.x + bounds.width / 2,
+      cy: origin.y + bounds.height / 2,
+    };
+  }
+}
+
+function getMainBoundsPayload() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return null;
+  }
+  const bounds = mainWindow.getBounds();
+  const anchor = ensureLauncherAnchor();
+  const work = workAreaNear(anchor.cx, anchor.cy);
+  return {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    workArea: { x: work.x, y: work.y, width: work.width, height: work.height },
+    anchor: { cx: anchor.cx, cy: anchor.cy },
+  };
 }
 
 function raiseMainWindow(focus = false) {
@@ -137,6 +278,11 @@ function syncOverlayToCapture(capture: CaptureResult) {
 
 function createWindow() {
   try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.warn('[Main] createWindow skipped — buddy window already exists');
+      return;
+    }
+    const appIcon = applyNativeAppIcon();
     mainWindow = new BrowserWindow({
       width: COLLAPSED_SIZE,
       height: COLLAPSED_SIZE,
@@ -146,6 +292,8 @@ function createWindow() {
       resizable: false,
       hasShadow: false,
       show: false,
+      title: PRODUCT_DISPLAY_NAME,
+      ...(appIcon && !appIcon.isEmpty() ? { icon: appIcon } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         sandbox: false,
@@ -156,7 +304,7 @@ function createWindow() {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
     mainWindow.once('ready-to-show', () => {
-      positionPanel(COLLAPSED_SIZE, COLLAPSED_SIZE);
+      setMainSizeAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
       mainWindow.showInactive();
       raiseMainWindow();
     });
@@ -186,6 +334,10 @@ function raiseOverlayWindow() {
 
 function createOverlay() {
   try {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      console.warn('[Main] createOverlay skipped — overlay window already exists');
+      return;
+    }
     const cursorMeta = getCursorDisplayMeta();
     const bounds = cursorMeta
       ? {
@@ -208,6 +360,7 @@ function createOverlay() {
       focusable: false,
       resizable: false,
       skipTaskbar: true,
+      title: `${PRODUCT_DISPLAY_NAME} Overlay`,
       // macOS clamps windows below the menu bar unless this is set; the overlay must cover the whole display.
       enableLargerThanScreen: isMac,
       show: false, // Prevent flashing, show once ready-to-show fires
@@ -247,8 +400,45 @@ function createOverlay() {
   }
 }
 
+app.on('second-instance', () => {
+  if (!gotSingleInstanceLock) return;
+  // Focus the existing buddy launcher — do not create another window.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    raiseMainWindow(true);
+  }
+});
+
+function installApplicationMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [];
+  if (isMac) {
+    template.push({ role: 'appMenu' });
+  }
+  template.push(
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Getting Started',
+          click: () => {
+            if (!mainWindow || mainWindow.isDestroyed()) return;
+            raiseMainWindow(true);
+            mainWindow.webContents.send('onOpenGettingStarted');
+          },
+        },
+      ],
+    }
+  );
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return;
   try {
+    applyNativeAppIcon();
+    installApplicationMenu();
     updateCapturedDisplays();
     createWindow();
     createOverlay();
@@ -256,12 +446,24 @@ app.whenReady().then(() => {
     void registerHoldDictationShortcuts(notifyHoldDictationStart, notifyHoldDictationEnd);
 
     if (isMac) {
+      // Non-prompting status check only — never request OS mic access at startup.
       const status = getPermissionStatus();
       console.log(`[Permissions] screen=${status.screen} microphone=${status.microphone}`);
-      void ensureMicrophone().catch((err) => console.warn('[Permissions] Microphone request failed:', err));
     }
 
-    console.log('ScreenTutor AI Started');
+    const inventory = BrowserWindow.getAllWindows().map((w) => {
+      const role =
+        w === mainWindow ? 'buddy' : w === overlayWindow ? 'overlay' : 'other';
+      return {
+        id: w.id,
+        role,
+        visible: w.isVisible(),
+        bounds: w.getBounds(),
+      };
+    });
+    console.log('[Main] Window inventory:', JSON.stringify(inventory));
+    console.log(`${PRODUCT_DISPLAY_NAME} Started`);
+    console.log(`[Main] userData=${app.getPath('userData')}`);
   } catch (error) {
     Sentry.captureException(error);
     console.error('App ready startup failure:', error);
@@ -400,7 +602,13 @@ ipcMain.handle('get-privacy-mode', () => {
 ipcMain.on('set-main-size', (_event, width, height) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     const panelHeight = height > 0 ? height : width;
-    positionPanel(width, panelHeight);
+    // Large chat panel: place beside the launcher. Compact / menu sizes keep the user anchor.
+    if (width >= 300 && panelHeight >= 400) {
+      buddyBoundsEpoch += 1;
+      positionPanelNearLauncher(width, panelHeight);
+    } else {
+      setMainSizeAtAnchor(width, panelHeight);
+    }
     if (width > COLLAPSED_SIZE || panelHeight > COLLAPSED_SIZE) {
       raiseMainWindow(true);
     } else if (!regionSelectActive) {
@@ -409,6 +617,88 @@ ipcMain.on('set-main-size', (_event, width, height) => {
     }
   }
 });
+
+ipcMain.on('set-main-size-at-anchor', (_event, width, height) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const panelHeight = height > 0 ? height : width;
+    buddyBoundsEpoch += 1;
+    setMainSizeAtAnchor(width, panelHeight);
+    if (width > COLLAPSED_SIZE || panelHeight > COLLAPSED_SIZE) {
+      raiseMainWindow(true);
+    } else if (!regionSelectActive) {
+      raiseOverlayWindow();
+      raiseMainWindow();
+    }
+  }
+});
+
+ipcMain.on('move-main-window', (_event, x, y) => {
+  if (typeof x !== 'number' || typeof y !== 'number') return;
+  // Only compact-launcher dragging updates the persistent anchor (see moveMainWindow).
+  moveMainWindow(x, y);
+});
+
+/**
+ * Awaitable tutor-panel placement near the current launcher anchor.
+ * Does not rewrite the launcher anchor. requestId lets the renderer ignore stale replies.
+ */
+ipcMain.handle('place-tutor-panel', (_event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const width =
+    payload && typeof payload.width === 'number' && Number.isFinite(payload.width)
+      ? payload.width
+      : PANEL_WIDTH;
+  const height =
+    payload && typeof payload.height === 'number' && Number.isFinite(payload.height)
+      ? payload.height
+      : PANEL_HEIGHT;
+  const requestId =
+    payload && typeof payload.requestId === 'number' && Number.isFinite(payload.requestId)
+      ? payload.requestId
+      : null;
+
+  buddyBoundsEpoch += 1;
+  const epoch = buddyBoundsEpoch;
+  const applied = positionPanelNearLauncher(width, height);
+  raiseMainWindow(false);
+  const anchor = ensureLauncherAnchor();
+  return {
+    bounds: applied,
+    anchor: { cx: anchor.cx, cy: anchor.cy },
+    epoch,
+    requestId,
+  };
+});
+
+/** Awaitable so the renderer can mount menu items only after bounds are applied. */
+ipcMain.handle('set-main-bounds', (_event, bounds) => {
+  if (!bounds || typeof bounds !== 'object') return null;
+  buddyBoundsEpoch += 1;
+  const applied = setMainBoundsExact(bounds.x, bounds.y, bounds.width, bounds.height);
+  // Do not focus-steal on menu expand — that caused a visible macOS window flash.
+  if (bounds.width > COLLAPSED_SIZE || bounds.height > COLLAPSED_SIZE) {
+    raiseMainWindow(false);
+  } else if (!regionSelectActive) {
+    raiseOverlayWindow();
+    raiseMainWindow(false);
+  }
+  return applied;
+});
+
+/** Dev/diagnostic: buddy + overlay roles (never secrets). */
+ipcMain.handle('get-window-inventory', () => {
+  return BrowserWindow.getAllWindows().map((w) => {
+    const role = w === mainWindow ? 'buddy' : w === overlayWindow ? 'overlay' : 'other';
+    return {
+      id: w.id,
+      role,
+      visible: w.isVisible(),
+      bounds: w.getBounds(),
+    };
+  });
+});
+
+ipcMain.handle('get-main-bounds', () => getMainBoundsPayload());
 
 ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -493,6 +783,9 @@ ipcMain.handle('get-active-window-title', async () => {
 });
 
 ipcMain.handle('get-permission-status', () => getPermissionStatus());
+
+/** Voice-path only: may prompt once when microphone status is not-determined. */
+ipcMain.handle('ensure-microphone', async () => ensureMicrophone());
 
 ipcMain.on('open-permission-settings', (_event, kind: PermissionKind) => {
   if (kind === 'screen' || kind === 'microphone') openPermissionSettings(kind);

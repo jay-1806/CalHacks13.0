@@ -54,7 +54,8 @@ describe('PrivacyGuard.isDenied', () => {
 
   it('allows neutral windows', () => {
     expect(guard.isDenied('VS Code - main.ts', false)).toBe(false);
-    expect(guard.isDenied('ScreenTutor', false)).toBe(false);
+    expect(guard.isDenied('Quicky.AI', false)).toBe(false);
+    expect(guard.isDenied('ScreenTutor', false)).toBe(false); // legacy internal label
     expect(guard.isDenied('Khan Academy', false)).toBe(false);
     expect(guard.isDenied('Desmos Graphing Calculator', false)).toBe(false);
   });

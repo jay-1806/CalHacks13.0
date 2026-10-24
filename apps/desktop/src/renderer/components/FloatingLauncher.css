@@ -1,11 +1,14 @@
 .floating-launcher {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: visible;
-  position: relative;
   z-index: 2;
+  background: transparent;
+  width: 100%;
+  height: 100%;
 }
 
 .app-container.collapsed .floating-launcher {
@@ -14,109 +17,122 @@
 }
 
 .app-container.expanded .floating-launcher {
+  width: auto;
+  height: auto;
   align-self: flex-end;
   padding: 0 8px 8px;
 }
 
-.launcher-btn {
+.floating-launcher.is-menu-open,
+.floating-launcher.is-canvas-open {
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * Pure coordinate origin for the Liquid Metal disc + arc items.
+ * Do NOT flex-center children here — that double-centered the launcher
+ * when combined with half-size offsets (Part 2.7 screenshot: +27,+27).
+ */
+.quicke-launcher-stage {
   position: relative;
+  width: 0;
+  height: 0;
+  overflow: visible;
+}
+
+.floating-launcher.has-arc-layout .quicke-launcher-stage {
+  position: absolute;
+  /* left/top set inline from arcLayout.launcherOffset (= screen center of metal) */
+  transform: none;
+}
+
+.floating-launcher.is-canvas-open:not(.has-arc-layout) .quicke-launcher-stage {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.launcher-btn {
+  /* Center → top-left conversion exactly once via translate(-50%, -50%). */
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  margin: 0;
   padding: 0;
   border: none;
-  border-radius: 0;
-  cursor: pointer;
+  border-radius: var(--st-radius-full);
+  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   overflow: visible;
   line-height: 0;
-  transition: transform 0.2s ease;
-}
-
-.launcher-icon-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: visible;
-}
-
-.launcher-logo {
-  display: block;
-  object-fit: contain;
-  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: transform var(--st-duration-med) var(--st-ease-out);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
   user-select: none;
-  transition: filter 0.2s ease, transform 0.2s ease;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.floating-launcher,
+.quicke-launcher-stage {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.app-container.expanded .launcher-btn {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  cursor: pointer;
 }
 
 .launcher-btn:hover {
-  transform: scale(1.05);
-}
-
-.launcher-btn:hover .launcher-logo {
-  filter: drop-shadow(0 0 14px rgba(96, 165, 250, 0.45));
+  transform: translate(-50%, -50%) scale(1.04);
 }
 
 .launcher-btn:active {
+  transform: translate(-50%, -50%) scale(0.97);
+  cursor: grabbing;
+}
+
+.app-container.expanded .launcher-btn:hover {
+  transform: scale(1.04);
+}
+
+.app-container.expanded .launcher-btn:active {
   transform: scale(0.97);
 }
 
-.launcher-btn.recording .launcher-logo,
-.launcher-btn.state-listening .launcher-logo {
-  animation: launcher-logo-pulse 1.2s ease-in-out infinite;
+.launcher-btn:focus {
+  outline: none;
 }
 
-.launcher-btn.speaking .launcher-logo,
-.launcher-btn.state-responding .launcher-logo {
-  animation: launcher-logo-pulse-responding 0.9s ease-in-out infinite;
+/* Neutral graphite focus — never purple/lavender. */
+.launcher-btn:focus-visible {
+  box-shadow: var(--st-focus-ring);
+  border-radius: var(--st-radius-full);
 }
 
-.launcher-btn.state-thinking .launcher-logo {
-  filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.5));
-}
-
-.launcher-btn.state-error .launcher-logo {
-  filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.55));
-}
-
-.launcher-btn.state-privacy .launcher-logo {
-  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.5));
-}
-
-.launcher-activity-ring {
-  position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  border: 2px solid rgba(96, 165, 250, 0.35);
-  animation: launcher-ring 1.6s ease-out infinite;
-  pointer-events: none;
-}
-
-@keyframes launcher-logo-pulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.35));
+@media (prefers-reduced-motion: reduce) {
+  .launcher-btn,
+  .launcher-btn:hover,
+  .launcher-btn:active,
+  .app-container.expanded .launcher-btn:hover,
+  .app-container.expanded .launcher-btn:active {
+    transition: none;
+    transform: translate(-50%, -50%);
   }
-  50% {
-    filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.7));
-  }
-}
 
-@keyframes launcher-logo-pulse-responding {
-  0%, 100% {
-    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.4));
-  }
-  50% {
-    filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.75));
-  }
-}
-
-@keyframes launcher-ring {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1.18);
-    opacity: 0;
+  .app-container.expanded .launcher-btn,
+  .app-container.expanded .launcher-btn:hover,
+  .app-container.expanded .launcher-btn:active {
+    transform: none;
   }
 }

@@ -1,4 +1,4 @@
-# 3-Minute Demo Script — ScreenTutor AI
+# 3-Minute Demo Script — Quicky.AI
 
 A walkthrough of the live app for judges. Every step uses the real services, so set the keys in `.env` first (see the README).
 
@@ -14,7 +14,7 @@ A walkthrough of the live app for judges. Every step uses the real services, so 
 ---
 
 ## 0:00 — Hook (20s)
-**Say**: *"ScreenTutor is a math tutor that lives next to your cursor. It looks at your screen only when you ask, explains out loud, and works the problem on your screen like a teacher at a whiteboard."*
+**Say**: *"Quicky.AI is a math tutor that lives next to your cursor. It looks at your screen only when you ask, explains out loud, and works the problem on your screen like a teacher at a whiteboard."*
 
 ## 0:20 — Ask by voice, watch it teach (70s)
 1. **Action**: Hold **Ctrl+Shift+E** (Mac: **Cmd+Shift+E**) and ask *"How do I solve this?"*, then let go.
@@ -34,4 +34,4 @@ A walkthrough of the live app for judges. Every step uses the real services, so 
 3. **Say**: *"For a fresh question about a screen we've already explained, a reworded version is answered from cache through Moss's semantic search instead of calling Claude again."*
 
 ## 2:35 — Close (25s)
-**Say**: *"Every step is traced to Elastic with latencies and quality checks, and sensitive windows like banking or email are blocked before anything is captured. ScreenTutor: a tutor that shows its work, right where you're working. Next, we're taking this beyond math to anything people learn online."*
+**Say**: *"Every step is traced to Elastic with latencies and quality checks, and sensitive windows like banking or email are blocked before anything is captured. Quicky.AI: a tutor that shows its work, right where you're working. Next, we're taking this beyond math to anything people learn online."*

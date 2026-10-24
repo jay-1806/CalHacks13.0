@@ -1,19 +1,30 @@
 import type { CanvasDrawShape } from '@screentutor/shared';
+import {
+  ANNOTATION_INK,
+  ANNOTATION_POINTER,
+  arrowHeadSize,
+  choosePointerAnchor,
+  inkStrokeWidth,
+  pointerObstacleRect,
+  shortenSegmentTip,
+  type RectLike,
+} from '@screentutor/shared';
 import { inkStroke, joinStrokes, penEase, seededRandom, sketchEllipse, sketchLine, type InkStyle, type Pt } from './sketch';
 
-const POINTER_OUTER_R = 14;
-const ARRIVAL_BURST_MS = 400;
-/** How long the pen takes to draw one mark */
+/** How long the pen takes to draw one mark (narration-independent visual). */
 export const DRAW_STROKE_MS = 650;
 
 /** Handwriting for labels and working, bundled with the app (@fontsource/caveat). */
 export const HAND_FONT = '"Caveat", "Segoe Print", "Bradley Hand", cursive';
 
-/** Pen colours: bright enough to read over black diagram lines, with a dark halo for white pages. */
-const INK = '#ff5b2e';
-const INK_ACCENT = '#ffb000';
-const INK_HALO = 'rgba(10, 12, 20, 0.55)';
-const MARKER = 'rgba(255, 214, 0, 0.38)';
+/**
+ * Pen colours: warm teaching ink, readable on light and dark pages.
+ * Halo stays soft so marks don't blot out equation digits.
+ */
+const INK = '#e85a2a';
+const INK_ACCENT = '#e8a010';
+const INK_HALO = 'rgba(12, 14, 22, 0.32)';
+const MARKER = `rgba(255, 196, 40, ${ANNOTATION_INK.highlightAlpha})`;
 
 export function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   const dpr = window.devicePixelRatio || 1;
@@ -153,7 +164,7 @@ function buildStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
 
   switch (shape.kind) {
     case 'circle':
-      return [sketchEllipse(a * W, b * H, Math.max(14, c * minDim), rand)];
+      return [sketchEllipse(a * W, b * H, Math.max(ANNOTATION_INK.circleMinR, c * minDim), rand)];
     case 'rect': {
       const x1 = a * W;
       const y1 = b * H;
@@ -177,14 +188,18 @@ function buildStrokes(shape: CanvasDrawShape, W: number, H: number): Pt[][] {
     case 'underline':
       return [sketchLine({ x: a * W, y: b * H }, { x: c * W, y: d * H }, rand)];
     case 'arrow': {
-      const from = { x: a * W, y: b * H };
-      const to = { x: c * W, y: d * H };
+      // Stop the tip short of the endpoint so the head doesn't sit on digits/labels.
+      const rawFrom = { x: a * W, y: b * H };
+      const rawTo = { x: c * W, y: d * H };
+      const shortened = shortenSegmentTip(rawFrom.x, rawFrom.y, rawTo.x, rawTo.y, ANNOTATION_POINTER.tipClearance);
+      const from = { x: shortened.x1, y: shortened.y1 };
+      const to = { x: shortened.x2, y: shortened.y2 };
       const shaft = sketchLine(from, to, rand);
       const tip = shaft[shaft.length - 1];
       const angle = Math.atan2(to.y - from.y, to.x - from.x);
-      const head = Math.max(12, Math.min(24, Math.hypot(to.x - from.x, to.y - from.y) * 0.14));
+      const head = arrowHeadSize(Math.hypot(to.x - from.x, to.y - from.y));
       const barb = (side: number) => {
-        const spread = Math.PI / 7 + (rand() - 0.5) * 0.15;
+        const spread = Math.PI / 7.5 + (rand() - 0.5) * 0.1;
         return sketchLine(
           tip,
           { x: tip.x - head * Math.cos(angle + side * spread), y: tip.y - head * Math.sin(angle + side * spread) },
@@ -240,12 +255,12 @@ function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Pt[][], progress: n
 }
 
 export function inkWidth(minDim: number): number {
-  return Math.max(3.5, Math.min(7, minDim * 0.0045));
+  return inkStrokeWidth(minDim);
 }
 
 /** How far outside a figure's side its arrow is drawn, in screen pixels. */
 export function sideMarkGap(minDim: number): number {
-  return inkWidth(minDim) * 2 + 8;
+  return inkWidth(minDim) * 2.4 + 10;
 }
 
 export function drawShapeOnCanvas(
@@ -280,8 +295,9 @@ export function drawShapeOnCanvas(
     case 'highlight':
       drawStrokes(ctx, shapeStrokes(shape, W, H), t, {
         color: MARKER,
-        width: Math.max(14, d * H),
+        width: Math.max(ANNOTATION_INK.highlightMinWidth, d * H * ANNOTATION_INK.highlightHeightFactor),
         taper: false,
+        halo: undefined,
       });
       break;
     case 'underline':
@@ -364,6 +380,18 @@ export interface PointerTrailPoint {
   age: number;
 }
 
+export interface DrawPointerOptions {
+  /** Known content footprint under the target (equation/region), if available. */
+  contentBounds?: RectLike | null;
+  obstacles?: RectLike[];
+  viewportW?: number;
+  viewportH?: number;
+}
+
+/**
+ * Compact teaching pointer: small offset marker + thin leader toward the target.
+ * Does not park a large opaque disc on top of the referenced content.
+ */
 export function drawEnhancedPointer(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -371,72 +399,114 @@ export function drawEnhancedPointer(
   timestamp: number,
   label: string,
   trail: PointerTrailPoint[],
-  arrivalBurst: { startTime: number } | null
+  arrivalBurst: { startTime: number } | null,
+  options?: DrawPointerOptions
 ) {
-  const idlePhase = (timestamp % 1800) / 1800;
-  const idleScale = 1 + 0.25 * Math.sin(idlePhase * Math.PI * 2);
-  const idleAlpha = 0.35 + 0.35 * (1 - Math.abs(Math.sin(idlePhase * Math.PI * 2)));
+  const W = options?.viewportW ?? ctx.canvas.clientWidth ?? window.innerWidth;
+  const H = options?.viewportH ?? ctx.canvas.clientHeight ?? window.innerHeight;
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, y, POINTER_OUTER_R * idleScale * 1.8, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(59, 139, 212, ${idleAlpha})`;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.restore();
+  const anchor = choosePointerAnchor({
+    targetX: x,
+    targetY: y,
+    viewportW: W,
+    viewportH: H,
+    contentBounds: options?.contentBounds,
+    obstacles: options?.obstacles,
+  });
 
-  if (arrivalBurst) {
-    const t = Math.min(1, (timestamp - arrivalBurst.startTime) / ARRIVAL_BURST_MS);
-    const burstR = 30 + t * 40;
-    const burstAlpha = 0.7 * (1 - t);
-    if (burstAlpha > 0.01) {
+  const { markerX: mx, markerY: my, tipX, tipY } = anchor;
+  const outerR = ANNOTATION_POINTER.outerR;
+  const stroke = ANNOTATION_POINTER.stroke;
+
+  // Soft graphite/slate — readable on light and dark pages without neon glow.
+  const ring = 'rgba(42, 52, 68, 0.88)';
+  const fill = 'rgba(248, 250, 252, 0.96)';
+  const accent = 'rgba(42, 52, 68, 0.92)';
+
+  if (!reducedMotion) {
+    const idlePhase = (timestamp % 2200) / 2200;
+    const idleScale = 1 + ANNOTATION_POINTER.idleAmp * Math.sin(idlePhase * Math.PI * 2);
+    const idleAlpha = 0.18 + 0.14 * (1 - Math.abs(Math.sin(idlePhase * Math.PI * 2)));
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(mx, my, outerR * idleScale * 1.55, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(42, 52, 68, ${idleAlpha})`;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (arrivalBurst && !reducedMotion) {
+    const t = Math.min(1, (timestamp - arrivalBurst.startTime) / ANNOTATION_POINTER.burstMs);
+    const burstR = outerR + t * (ANNOTATION_POINTER.burstMaxR - outerR);
+    const burstAlpha = 0.45 * (1 - t);
+    if (burstAlpha > 0.02) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, burstR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(59, 139, 212, ${burstAlpha})`;
-      ctx.lineWidth = 3;
+      ctx.arc(mx, my, burstR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(42, 52, 68, ${burstAlpha})`;
+      ctx.lineWidth = 1.4;
       ctx.stroke();
       ctx.restore();
     }
   }
 
-  for (let i = 0; i < trail.length; i++) {
+  // Thin leader from offset marker toward (but not onto) the target.
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = stroke;
+  ctx.beginPath();
+  ctx.moveTo(mx, my);
+  ctx.lineTo(tipX, tipY);
+  ctx.stroke();
+  // Tiny tip mark — precise, not an oversized arrowhead.
+  ctx.beginPath();
+  ctx.arc(tipX, tipY, 1.6, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
+  ctx.fill();
+  ctx.restore();
+
+  const trailLimit = Math.min(trail.length, ANNOTATION_POINTER.trailMax);
+  for (let i = 0; i < trailLimit; i++) {
     const pt = trail[i];
-    const fade = Math.max(0, 1 - pt.age / 6);
+    const fade = Math.max(0, 1 - pt.age / 5);
     if (fade <= 0) continue;
-    const r = 4 + fade * 8;
     ctx.save();
-    ctx.globalAlpha = fade * 0.5;
+    ctx.globalAlpha = fade * 0.28;
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(59, 139, 212, 0.6)';
+    ctx.arc(pt.x, pt.y, ANNOTATION_POINTER.trailR, 0, Math.PI * 2);
+    ctx.fillStyle = accent;
     ctx.fill();
     ctx.restore();
   }
 
+  // Compact focus disc at the offset marker (not on the target).
   ctx.save();
-  ctx.shadowColor = 'rgba(59, 139, 212, 0.7)';
-  ctx.shadowBlur = 16;
   ctx.beginPath();
-  ctx.arc(x, y, POINTER_OUTER_R, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(59, 139, 212, 0.92)';
+  ctx.arc(mx, my, outerR, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
   ctx.fill();
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = stroke;
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(x, y, 5, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.arc(mx, my, ANNOTATION_POINTER.innerR, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
   ctx.fill();
   ctx.restore();
 
   if (label) {
-    drawCanvasLabel(ctx, x, y - POINTER_OUTER_R, label);
+    drawCanvasLabel(ctx, mx, my - outerR - 2, label);
   }
 }
 
 export function getBubbleMaxWidth(viewportW: number): number {
-  return Math.min(480, Math.max(260, viewportW * 0.4));
+  return Math.min(420, Math.max(240, viewportW * 0.38));
 }
 
 function overlapArea(a: Rect, b: Rect): number {
@@ -479,21 +549,35 @@ export function clampBubbleToViewport(
     top = clampY(pointerY + dragOffset.y);
   } else {
     const pad = 14;
+    const pointerAnchor = choosePointerAnchor({
+      targetX: pointerX,
+      targetY: pointerY,
+      viewportW,
+      viewportH,
+    });
+    const pointerBlock = pointerObstacleRect(
+      pointerAnchor.markerX,
+      pointerAnchor.markerY,
+      pointerAnchor.tipX,
+      pointerAnchor.tipY
+    );
     const blocked = [
       ...obstacles.map((o) => ({ x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 })),
-      { x: pointerX - 44, y: pointerY - 80, w: 88, h: 124 }, // pointer and its label
+      pointerBlock,
     ];
     const cost = (x: number, y: number) =>
       blocked.reduce((sum, r) => sum + overlapArea({ x, y, w: bw, h: bh }, r), 0);
 
     const prevLeft = parseFloat(bubble.dataset.left ?? '');
     const prevTop = parseFloat(bubble.dataset.top ?? '');
-    const anchorRight = pointerX > viewportW * 0.55;
+    const mx = pointerAnchor.markerX;
+    const my = pointerAnchor.markerY;
+    const anchorRight = mx > viewportW * 0.55;
     const candidates: Array<[number, number]> = [
-      [anchorRight ? pointerX - bw - 28 : pointerX + 28, pointerY - 48],
-      [anchorRight ? pointerX + 28 : pointerX - bw - 28, pointerY - 48],
-      [pointerX - bw / 2, pointerY + 56],
-      [pointerX - bw / 2, pointerY - bh - 56],
+      [anchorRight ? mx - bw - 24 : mx + 24, my - 40],
+      [anchorRight ? mx + 24 : mx - bw - 24, my - 40],
+      [mx - bw / 2, my + 44],
+      [mx - bw / 2, my - bh - 44],
       [viewportW - bw - M, M],
       [viewportW - bw - M, viewportH - bh - M],
       [M, viewportH - bh - M],

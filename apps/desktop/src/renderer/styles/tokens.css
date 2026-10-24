@@ -1,0 +1,60 @@
+/**
+ * Quicky.AI — Frosted Pearl design tokens
+ * Namespaced (--st-*) to avoid collisions with legacy styles.
+ */
+
+:root {
+  /* Surfaces */
+  --st-bg: #f7f8fa;
+  --st-surface: #ffffff;
+  --st-surface-secondary: #f0f2f5;
+  --st-surface-active: #e9edf2;
+  --st-surface-frost: rgba(255, 255, 255, 0.72);
+
+  /* Text */
+  --st-text: #232d3d;
+  --st-text-secondary: #687589;
+  --st-text-muted: #929caa;
+  --st-text-on-metal: #1a1f2e;
+  --st-text-on-dark: #ffffff;
+
+  /* Accents — semantic only; panel chrome stays neutral graphite */
+  --st-accent: #7467e8;
+  --st-active: #303a49;
+  --st-success: #53b99c;
+  --st-danger: #e25c5c;
+  --st-border: #dfe4eb;
+  --st-radius-control: 11px;
+
+  /* Metal / launcher */
+  --st-metal-hi: #f4f6f8;
+  --st-metal-mid: #c5cad3;
+  --st-metal-lo: #8b93a3;
+  --st-metal-rim: rgba(210, 216, 226, 0.55);
+  --st-metal-rim-shine: rgba(255, 255, 255, 0.92);
+  --st-metal-rim-shine-soft: rgba(236, 240, 246, 0.55);
+  --st-metal-rim-track: rgba(170, 178, 190, 0.35);
+  --st-rim-shine-duration: 11s;
+
+  /* Radii */
+  --st-radius-sm: 8px;
+  --st-radius-md: 14px;
+  --st-radius-lg: 22px;
+  /** Outer tutor panel shell — soft continuous macOS corner. */
+  --st-radius-panel: 24px;
+  --st-radius-full: 9999px;
+
+  /* Elevation */
+  --st-shadow-sm: 0 1px 2px rgba(24, 33, 53, 0.06);
+  --st-shadow-md: 0 8px 24px rgba(24, 33, 53, 0.12);
+  --st-shadow-launcher: 0 6px 18px rgba(24, 33, 53, 0.18), 0 1px 3px rgba(24, 33, 53, 0.1);
+
+  /* Focus — neutral graphite (no lavender/purple halo on the launcher) */
+  --st-focus-ring: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(42, 49, 64, 0.42);
+  --st-focus-ring-soft: 0 0 0 3px rgba(42, 49, 64, 0.28);
+
+  /* Motion */
+  --st-duration-fast: 120ms;
+  --st-duration-med: 220ms;
+  --st-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

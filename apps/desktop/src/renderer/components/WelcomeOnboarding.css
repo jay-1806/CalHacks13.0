@@ -1,0 +1,245 @@
+/* Quicky.AI first-launch welcome — Frosted Pearl, fits 420×620 panel */
+
+.welcome-onboarding {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  color: var(--st-text);
+  background: var(--st-bg);
+  border-radius: var(--st-radius-panel);
+  border: 1px solid var(--st-border);
+  box-shadow: var(--st-shadow-md);
+  overflow: hidden;
+  isolation: isolate;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  animation: welcome-onboarding-in var(--st-duration-med) var(--st-ease-out);
+}
+
+@keyframes welcome-onboarding-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-onboarding {
+    animation: none;
+  }
+}
+
+.welcome-onboarding__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 22px 22px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.welcome-onboarding__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.welcome-onboarding__logo {
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: contain;
+  display: block;
+}
+
+.welcome-onboarding__brand-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.welcome-onboarding__product {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--st-text);
+  white-space: nowrap;
+}
+
+.welcome-onboarding__eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--st-text-secondary);
+  letter-spacing: 0.01em;
+}
+
+.welcome-onboarding__hero {
+  text-align: center;
+  padding: 4px 4px 0;
+}
+
+.welcome-onboarding__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+  color: var(--st-text);
+}
+
+.welcome-onboarding__subtitle {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--st-text-secondary);
+  letter-spacing: -0.01em;
+}
+
+.welcome-onboarding__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-onboarding__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 12px;
+  border-radius: var(--st-radius-md);
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  box-shadow: var(--st-shadow-sm);
+}
+
+.welcome-onboarding__step-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--st-text);
+  background: var(--st-surface-secondary);
+  border: 1px solid var(--st-border);
+}
+
+.welcome-onboarding__step-copy {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.welcome-onboarding__step-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--st-text);
+  line-height: 1.3;
+}
+
+.welcome-onboarding__step-index {
+  color: var(--st-text-muted);
+  font-weight: 550;
+}
+
+.welcome-onboarding__step-subtitle {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  font-weight: 450;
+  color: var(--st-text-secondary);
+  line-height: 1.35;
+}
+
+.welcome-onboarding__footer {
+  flex-shrink: 0;
+  padding: 12px 22px 20px;
+  border-top: 1px solid var(--st-border);
+  background: var(--st-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-onboarding__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.welcome-onboarding__btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: var(--st-radius-control);
+  min-height: 42px;
+  padding: 10px 16px;
+  transition: background var(--st-duration-fast) var(--st-ease-out),
+    color var(--st-duration-fast) var(--st-ease-out),
+    border-color var(--st-duration-fast) var(--st-ease-out);
+}
+
+.welcome-onboarding__btn:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.welcome-onboarding__btn--primary {
+  color: #fff;
+  background: var(--st-active);
+}
+
+.welcome-onboarding__btn--primary:hover {
+  background: #242c39;
+}
+
+.welcome-onboarding__btn--primary:active {
+  background: #1b2230;
+}
+
+.welcome-onboarding__btn--secondary {
+  color: var(--st-text);
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+}
+
+.welcome-onboarding__btn--secondary:hover {
+  background: var(--st-surface-secondary);
+}
+
+.welcome-onboarding__btn--secondary:active {
+  background: var(--st-surface-active);
+}
+
+.welcome-onboarding__hint {
+  margin: 0;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 450;
+  color: var(--st-text-muted);
+  line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-onboarding__btn {
+    transition: none;
+  }
+}

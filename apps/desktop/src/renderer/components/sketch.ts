@@ -129,7 +129,7 @@ export function inkStroke(ctx: CanvasRenderingContext2D, pts: Pt[], progress: nu
     ctx.moveTo(visible[0].x, visible[0].y);
     for (const p of visible.slice(1)) ctx.lineTo(p.x, p.y);
     ctx.strokeStyle = style.halo;
-    ctx.lineWidth = style.width + 4;
+    ctx.lineWidth = style.width + 2.2;
     ctx.stroke();
   }
 

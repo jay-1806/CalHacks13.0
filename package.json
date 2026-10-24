@@ -2,7 +2,7 @@
   "name": "screentutor-ai",
   "version": "0.1.0",
   "private": true,
-  "description": "ScreenTutor AI \u2014 an always-available desktop AI tutor that draws on your screen",
+  "description": "Quicky.AI \u2014 an always-available desktop AI math tutor that draws on your screen",
   "scripts": {
     "dev": "concurrently \"pnpm dev:orchestrator\" \"pnpm dev:desktop\"",
     "dev:orchestrator": "pnpm --filter @screentutor/orchestrator dev",
