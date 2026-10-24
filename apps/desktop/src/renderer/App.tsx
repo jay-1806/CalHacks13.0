@@ -88,6 +88,8 @@ export default function App() {
   const silentNarrationRef = useRef<(() => void) | null>(null);
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
+  /** The chat was tucked away while an answer is explained, and comes back when it ends. */
+  const panelHiddenForAnswerRef = useRef(false);
   /** Invalidates in-flight placeTutorPanel / expand work on collapse or rapid re-open. */
   const panelLayoutRequestRef = useRef(0);
   const panelViewRef = useRef<PanelView>(panelView);
@@ -215,6 +217,7 @@ export default function App() {
   };
 
   const expandPanel = async () => {
+    panelHiddenForAnswerRef.current = false;
     const requestId = ++panelLayoutRequestRef.current;
     setCommandMenuOpen(false);
     setCanvasControlsOpen(false);
@@ -462,10 +465,12 @@ export default function App() {
       await transcriptionProvider.stopSession();
       const transcript = await transcriptionProvider.getFinalTranscript(activeLessonIdRef.current);
       if (transcript && transcript.trim()) {
-        if (!wasHoldDictation && !isPanelExpandedRef.current) {
-          void expandPanel();
-        }
         startTurn(transcript.trim());
+        hidePanelForAnswer();
+        if (!wasHoldDictation) {
+          // Open the chat after the explanation, not on top of it.
+          panelHiddenForAnswerRef.current = true;
+        }
         setIsScanning(true);
         let capBase64: string | undefined;
         let capMeta: ReturnType<typeof getScreenMetadata> | undefined;
@@ -476,6 +481,7 @@ export default function App() {
           if (!capData) {
             failActiveTurn('Screen capture was blocked or unavailable.');
             setBuddyState('privacy');
+            restorePanelAfterAnswer();
             return;
           }
           capBase64 = capData.base64;
@@ -487,6 +493,7 @@ export default function App() {
         const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
         const res = await askQuestion(transcript, capBase64, capMeta, activeLessonIdRef.current, devOverride);
         setBuddyState(res ? 'responding' : 'error');
+        if (!res) restorePanelAfterAnswer();
       } else {
         setBuddyState('idle');
       }
@@ -494,6 +501,7 @@ export default function App() {
       console.error('Failed to stop/transcribe recording:', err);
       setBuddyState('error');
       setIsScanning(false);
+      restorePanelAfterAnswer();
     }
   };
 
@@ -599,6 +607,20 @@ export default function App() {
     await new Promise((resolve) => setTimeout(resolve, 120)); // let the cleared overlay reach the screen
   };
 
+  /** Tuck the chat away so the learner's attention is on the explanation (and it stays out of the screenshot). */
+  const hidePanelForAnswer = () => {
+    if (!isPanelExpandedRef.current || panelViewRef.current !== 'chat') return;
+    collapsePanel();
+    panelHiddenForAnswerRef.current = true;
+  };
+
+  /** Bring the chat back once the explanation is over, or the question failed. */
+  const restorePanelAfterAnswer = () => {
+    if (!panelHiddenForAnswerRef.current) return;
+    panelHiddenForAnswerRef.current = false;
+    if (!isPanelExpandedRef.current) void expandPanel();
+  };
+
   const stopNarration = () => {
     silentNarrationRef.current?.();
     silentNarrationRef.current = null;
@@ -609,6 +631,7 @@ export default function App() {
     silentNarrationRef.current = null;
     window.electronAPI.finishOverlayNarration();
     setRevealedSpokenText(spoken);
+    restorePanelAfterAnswer();
   };
 
   // One clock for everything: the voice. Each step's pointer, drawings and chat
@@ -618,7 +641,10 @@ export default function App() {
 
     const spoken = response.spokenText || response.spokenExplanation || '';
     const overlayText = response.overlayText || response.visualText || '';
-    if (!spoken) return;
+    if (!spoken) {
+      restorePanelAfterAnswer();
+      return;
+    }
 
     const steps = buildNarrationSteps(spoken, overlayText).map((step) => step.spoken);
     setRevealedSpokenText('');
@@ -689,6 +715,7 @@ export default function App() {
     window.electronAPI.finishOverlayNarration();
     setBuddyState('thinking');
     try {
+      hidePanelForAnswer();
       setIsScanning(true);
       let capBase64: string | undefined;
       let capMeta: ReturnType<typeof getScreenMetadata> | undefined;
@@ -702,6 +729,7 @@ export default function App() {
         if (!capData) {
           failActiveTurn('Screen capture was blocked or unavailable.');
           setBuddyState('privacy');
+          restorePanelAfterAnswer();
           performanceTracker.endSpan('total_interaction_latency');
           return;
         }
@@ -714,10 +742,12 @@ export default function App() {
       const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
       const res = await askQuestion(questionText, capBase64, capMeta, activeLessonId, devOverride);
       setBuddyState(res ? 'responding' : 'error');
+      if (!res) restorePanelAfterAnswer();
       performanceTracker.endSpan('total_interaction_latency');
     } catch {
       setBuddyState('error');
       setIsScanning(false);
+      restorePanelAfterAnswer();
       performanceTracker.endSpan('total_interaction_latency');
     }
   };

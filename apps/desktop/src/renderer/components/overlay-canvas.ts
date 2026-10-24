@@ -1,7 +1,9 @@
 import type { CanvasDrawShape } from '@screentutor/shared';
 import { inkStroke, joinStrokes, penEase, seededRandom, sketchEllipse, sketchLine, type InkStyle, type Pt } from './sketch';
 
-const POINTER_OUTER_R = 14;
+/** The pointer: a small bright cursor, distinct from the orange ink */
+const POINTER_COLOR = '#2f7bff';
+const POINTER_PULSE_MS = 1400;
 const ARRIVAL_BURST_MS = 400;
 /** How long the pen takes to draw one mark */
 export const DRAW_STROKE_MS = 650;
@@ -313,57 +315,31 @@ export function drawShapeOnCanvas(
   ctx.restore();
 }
 
-export interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-/** Screen area a shape covers, so the explanation card can stay clear of it. */
-export function shapeBounds(ctx: CanvasRenderingContext2D, shape: CanvasDrawShape, W: number, H: number): Rect {
-  const [a, b, c, d] = shape.coords;
-  const minDim = Math.min(W, H);
-  switch (shape.kind) {
-    case 'work': {
-      ctx.save();
-      const box = workBox(ctx, a * W, b * H, shape.label ?? '', minDim);
-      ctx.restore();
-      return { x: box.x, y: box.y, w: box.w, h: box.h };
-    }
-    case 'label': {
-      ctx.save();
-      ctx.font = `700 ${labelFontSize(true)}px ${HAND_FONT}`;
-      const w = ctx.measureText(shape.label ?? '').width + 24;
-      ctx.restore();
-      return { x: a * W - w / 2, y: b * H - 46, w, h: 46 };
-    }
-    case 'circle': {
-      const r = c * minDim * 1.2;
-      return { x: a * W - r, y: b * H - r - (shape.label ? 40 : 0), w: r * 2, h: r * 2 + (shape.label ? 40 : 0) };
-    }
-    case 'rightangle': {
-      const s = Math.max(16, (c ?? 0.02) * minDim);
-      return { x: a * W - s, y: b * H - s, w: s * 2, h: s * 2 };
-    }
-    case 'rect':
-    case 'highlight':
-      return { x: a * W, y: b * H, w: c * W, h: d * H };
-    case 'arrow':
-    case 'underline': {
-      const x = Math.min(a, c) * W;
-      const y = Math.min(b, d) * H;
-      return { x, y, w: Math.abs(c - a) * W, h: Math.abs(d - b) * H };
-    }
-  }
-}
-
 export interface PointerTrailPoint {
   x: number;
   y: number;
   age: number;
 }
 
+/** How far the cursor's tip sits from the target's centre (CSS px) */
+const CURSOR_TIP_OFFSET = 6;
+
+/** Arrow cursor outline, tip at (0, 0), pointing up and to the left (CSS px). */
+const CURSOR_SHAPE: Array<[number, number]> = [
+  [0, 0],
+  [0, 17],
+  [4.4, 13.2],
+  [7.3, 19.8],
+  [10.2, 18.5],
+  [7.4, 12],
+  [13, 12],
+];
+
+/**
+ * The teaching pointer: a small arrow cursor whose tip sits on the target, so it
+ * points at a digit or label without covering it. A thin ring keeps pulsing out
+ * from the tip so it is easy to spot; a white edge keeps it readable on any page.
+ */
 export function drawEnhancedPointer(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -373,157 +349,59 @@ export function drawEnhancedPointer(
   trail: PointerTrailPoint[],
   arrivalBurst: { startTime: number } | null
 ) {
-  const idlePhase = (timestamp % 1800) / 1800;
-  const idleScale = 1 + 0.25 * Math.sin(idlePhase * Math.PI * 2);
-  const idleAlpha = 0.35 + 0.35 * (1 - Math.abs(Math.sin(idlePhase * Math.PI * 2)));
-
   ctx.save();
+
+  // Trail while moving: a few small fading dots.
+  for (const pt of trail) {
+    const fade = Math.max(0, 1 - pt.age / 6);
+    if (fade <= 0) continue;
+    ctx.globalAlpha = fade * 0.45;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 1.5 + fade * 2, 0, Math.PI * 2);
+    ctx.fillStyle = POINTER_COLOR;
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Pulse: a thin ring that grows from the tip and fades, over and over.
+  const pulse = (timestamp % POINTER_PULSE_MS) / POINTER_PULSE_MS;
   ctx.beginPath();
-  ctx.arc(x, y, POINTER_OUTER_R * idleScale * 1.8, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(59, 139, 212, ${idleAlpha})`;
+  ctx.arc(x, y, 3 + pulse * 14, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(47, 123, 255, ${0.6 * (1 - pulse)})`;
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.restore();
 
   if (arrivalBurst) {
     const t = Math.min(1, (timestamp - arrivalBurst.startTime) / ARRIVAL_BURST_MS);
-    const burstR = 30 + t * 40;
-    const burstAlpha = 0.7 * (1 - t);
-    if (burstAlpha > 0.01) {
-      ctx.save();
+    if (t < 1) {
       ctx.beginPath();
-      ctx.arc(x, y, burstR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(59, 139, 212, ${burstAlpha})`;
-      ctx.lineWidth = 3;
+      ctx.arc(x, y, 4 + t * 22, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(47, 123, 255, ${0.7 * (1 - t)})`;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
-      ctx.restore();
     }
   }
 
-  for (let i = 0; i < trail.length; i++) {
-    const pt = trail[i];
-    const fade = Math.max(0, 1 - pt.age / 6);
-    if (fade <= 0) continue;
-    const r = 4 + fade * 8;
-    ctx.save();
-    ctx.globalAlpha = fade * 0.5;
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(59, 139, 212, 0.6)';
-    ctx.fill();
-    ctx.restore();
-  }
-
-  ctx.save();
-  ctx.shadowColor = 'rgba(59, 139, 212, 0.7)';
-  ctx.shadowBlur = 16;
+  // The cursor: soft shadow, white edge, blue body.
   ctx.beginPath();
-  ctx.arc(x, y, POINTER_OUTER_R, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(59, 139, 212, 0.92)';
-  ctx.fill();
+  // The tip rests just off the target's lower-right, touching it rather than covering it.
+  const tx = x + CURSOR_TIP_OFFSET;
+  const ty = y + CURSOR_TIP_OFFSET * 1.4;
+  CURSOR_SHAPE.forEach(([cx, cy], i) => (i === 0 ? ctx.moveTo(tx + cx, ty + cy) : ctx.lineTo(tx + cx, ty + cy)));
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(10, 14, 24, 0.45)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 3;
   ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x, y, 5, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = POINTER_COLOR;
   ctx.fill();
   ctx.restore();
 
   if (label) {
-    drawCanvasLabel(ctx, x, y - POINTER_OUTER_R, label);
+    drawCanvasLabel(ctx, x, y - 8, label);
   }
-}
-
-export function getBubbleMaxWidth(viewportW: number): number {
-  return Math.min(480, Math.max(260, viewportW * 0.4));
-}
-
-function overlapArea(a: Rect, b: Rect): number {
-  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
-  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-  return w > 0 && h > 0 ? w * h : 0;
-}
-
-/**
- * Place the explanation card where it covers none of the marks, the working
- * or the pointer: beside the pointer if there is room, else a free corner.
- * It stays put while its spot is still clear, so it doesn't jump around.
- */
-export function clampBubbleToViewport(
-  bubble: HTMLDivElement,
-  pointerX: number,
-  pointerY: number,
-  viewportW: number,
-  viewportH: number,
-  userMoved: boolean,
-  dragOffset: { x: number; y: number },
-  obstacles: Rect[] = []
-) {
-  const maxW = getBubbleMaxWidth(viewportW);
-  const maxH = viewportH * 0.7;
-  bubble.style.maxWidth = `${maxW}px`;
-  bubble.style.maxHeight = `${maxH}px`;
-
-  const bw = Math.min(bubble.offsetWidth || maxW, maxW);
-  const bh = Math.min(bubble.offsetHeight || 120, maxH);
-  const M = 16;
-  const clampX = (x: number) => Math.max(M, Math.min(x, viewportW - bw - M));
-  const clampY = (y: number) => Math.max(M, Math.min(y, viewportH - bh - M));
-
-  let left: number;
-  let top: number;
-
-  if (userMoved) {
-    left = clampX(pointerX + dragOffset.x);
-    top = clampY(pointerY + dragOffset.y);
-  } else {
-    const pad = 14;
-    const blocked = [
-      ...obstacles.map((o) => ({ x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 })),
-      { x: pointerX - 44, y: pointerY - 80, w: 88, h: 124 }, // pointer and its label
-    ];
-    const cost = (x: number, y: number) =>
-      blocked.reduce((sum, r) => sum + overlapArea({ x, y, w: bw, h: bh }, r), 0);
-
-    const prevLeft = parseFloat(bubble.dataset.left ?? '');
-    const prevTop = parseFloat(bubble.dataset.top ?? '');
-    const anchorRight = pointerX > viewportW * 0.55;
-    const candidates: Array<[number, number]> = [
-      [anchorRight ? pointerX - bw - 28 : pointerX + 28, pointerY - 48],
-      [anchorRight ? pointerX + 28 : pointerX - bw - 28, pointerY - 48],
-      [pointerX - bw / 2, pointerY + 56],
-      [pointerX - bw / 2, pointerY - bh - 56],
-      [viewportW - bw - M, M],
-      [viewportW - bw - M, viewportH - bh - M],
-      [M, viewportH - bh - M],
-      [M, M],
-    ];
-
-    let best: [number, number] | null = null;
-    let bestCost = Infinity;
-    if (!isNaN(prevLeft) && !isNaN(prevTop)) {
-      const keep: [number, number] = [clampX(prevLeft), clampY(prevTop)];
-      if (cost(...keep) === 0) best = keep;
-    }
-    if (!best) {
-      for (const [x, y] of candidates) {
-        const spot: [number, number] = [clampX(x), clampY(y)];
-        const c = cost(...spot);
-        if (c < bestCost) {
-          best = spot;
-          bestCost = c;
-          if (c === 0) break;
-        }
-      }
-    }
-    [left, top] = best!;
-  }
-
-  bubble.dataset.left = String(left);
-  bubble.dataset.top = String(top);
-  bubble.style.left = `${left}px`;
-  bubble.style.top = `${top}px`;
-  bubble.style.right = 'auto';
-  bubble.style.bottom = 'auto';
 }

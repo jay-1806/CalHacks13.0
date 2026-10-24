@@ -15,17 +15,13 @@ import {
   type NarrationStep,
 } from '@screentutor/shared';
 import type { OverlayExplanationPayload } from '../types/explanation';
-import ExplanationBubbleText from './ExplanationBubbleText';
 import {
   setupCanvas,
   drawShapeOnCanvas,
   drawEnhancedPointer,
-  clampBubbleToViewport,
-  shapeBounds,
   sideMarkGap,
   DRAW_STROKE_MS,
   type PointerTrailPoint,
-  type Rect,
 } from './overlay-canvas';
 import './AnnotationOverlay.css';
 
@@ -99,7 +95,6 @@ export default function AnnotationOverlay() {
   const [isDragging, setIsDragging] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bubbleRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const shapeIdRef = useRef(0);
   const pointRef = useRef(point);
@@ -311,7 +306,6 @@ export default function AnnotationOverlay() {
     eraseTimerRef.current = null;
     eraseStartRef.current = null;
     if (canvasRef.current) canvasRef.current.style.opacity = '';
-    if (bubbleRef.current) bubbleRef.current.style.opacity = '';
   };
 
   const clearOverlayNow = () => {
@@ -372,32 +366,6 @@ export default function AnnotationOverlay() {
       return;
     }
   };
-
-  /** Everything drawn on screen, for keeping the explanation card off it. */
-  const shapeObstacles = (W: number, H: number): Rect[] => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return [];
-    return shapesRef.current.map((active) => shapeBounds(ctx, active.shape, W, H));
-  };
-
-  const persistExplanation = useCallback((visible: boolean) => {
-    const current = pointRef.current;
-    if (!current?.pointTarget || current.pointTarget.x === null || current.pointTarget.y === null) return;
-
-    const payload = {
-      anchorX: current.pointTarget.x,
-      anchorY: current.pointTarget.y,
-      dragOffsetX: dragOffsetRef.current.x,
-      dragOffsetY: dragOffsetRef.current.y,
-      text: current.text,
-    };
-
-    if (visible) {
-      window.electronAPI.notifyExplanationUpdated(payload);
-    } else {
-      window.electronAPI.notifyExplanationMinimized(payload);
-    }
-  }, []);
 
   const renderFrame = useRef((timestamp: number) => {
     const canvas = canvasRef.current;
@@ -477,28 +445,12 @@ export default function AnnotationOverlay() {
       }
     }
 
-    if (bubbleRef.current && !minimized) {
-      const drag = dragOffsetRef.current;
-      const userMoved = drag.x !== 0 || drag.y !== 0;
-      clampBubbleToViewport(
-        bubbleRef.current,
-        pointerPosRef.current.x,
-        pointerPosRef.current.y,
-        W,
-        H,
-        userMoved,
-        drag,
-        shapeObstacles(W, H)
-      );
-    }
-
     if (eraseStartRef.current !== null) {
       const left = 1 - (timestamp - eraseStartRef.current) / ERASE_FADE_MS;
       if (left <= 0) {
         clearOverlayNow();
       } else {
         canvas.style.opacity = String(left);
-        if (bubbleRef.current) bubbleRef.current.style.opacity = String(left);
       }
     }
 
@@ -640,12 +592,9 @@ export default function AnnotationOverlay() {
       window.electronAPI.setIgnoreMouseEvents(false);
       return;
     }
-    if (point && !isMinimized) {
-      window.electronAPI.setIgnoreMouseEvents(false);
-    } else {
-      window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
-    }
-  }, [point, isMinimized, isRegionSelecting]);
+    // Pointer, marks and working are display-only: clicks go through to the page.
+    window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+  }, [isRegionSelecting]);
 
   useEffect(() => {
     // Once the voice-synced narration has started it owns the overlay. This render
@@ -690,75 +639,11 @@ export default function AnnotationOverlay() {
     };
   }, [point, showFullText]);
 
-  useEffect(() => {
-    if (!point || isMinimized || !bubbleRef.current) return;
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const userMoved = dragOffset.x !== 0 || dragOffset.y !== 0;
-    clampBubbleToViewport(
-      bubbleRef.current,
-      pointerPosRef.current.x,
-      pointerPosRef.current.y,
-      W,
-      H,
-      userMoved,
-      dragOffset,
-      shapeObstacles(W, H)
-    );
-  }, [displayedText, point, isMinimized, dragOffset]);
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      setDragOffset({
-        x: dragStartRef.current.offsetX + (event.clientX - dragStartRef.current.pointerX),
-        y: dragStartRef.current.offsetY + (event.clientY - dragStartRef.current.pointerY),
-      });
-    };
-
-    const handlePointerUp = () => {
-      setIsDragging(false);
-      persistExplanation(true);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [isDragging, persistExplanation]);
-
-  const handleDragStart = (event: React.PointerEvent) => {
-    if ((event.target as HTMLElement).closest('.bubble-minimize-btn')) return;
-    event.preventDefault();
-    event.stopPropagation();
-    dragStartRef.current = {
-      pointerX: event.clientX,
-      pointerY: event.clientY,
-      offsetX: dragOffset.x,
-      offsetY: dragOffset.y,
-    };
-    setIsDragging(true);
-  };
-
-  const handleMinimize = (event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsMinimized(true);
-    persistExplanation(false);
-  };
-
   if (triggerError) {
     throw new Error('Simulated Overlay Render Error');
   }
 
   if (!isVisible) return null;
-
-  const bubbleText = showFullText && point?.text
-    ? parseStreamTags(point.text).visibleText
-    : displayedText;
 
   return (
     <div
@@ -769,30 +654,6 @@ export default function AnnotationOverlay() {
         ref={canvasRef}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
       />
-      {point && !isMinimized && bubbleText && (
-        <div
-          ref={bubbleRef}
-          className={`explanation-panel ${isDragging ? 'dragging' : ''}`}
-          style={{ pointerEvents: 'auto' }}
-          onPointerDown={handleDragStart}
-        >
-          <div className="bubble-chrome">
-            <span className="bubble-drag-handle" aria-hidden="true">⋮⋮</span>
-            <button
-              type="button"
-              className="bubble-minimize-btn"
-              onClick={handleMinimize}
-              title="Minimize explanation"
-              aria-label="Minimize explanation"
-            >
-              −
-            </button>
-          </div>
-          <div className="bubble-text">
-            <ExplanationBubbleText text={bubbleText} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
