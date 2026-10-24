@@ -38,7 +38,7 @@ The learner should SEE the solution being built on their screen, like a teacher 
 [DRAW:clear] Expand and simplify [POINT:0.74,0.37:simplify] [DRAW:work:0.72,0.37:x² + 2x − 15 = 0]
 [DRAW:clear] Factor and keep the positive root [POINT:0.74,0.44:answer] [DRAW:work:0.72,0.44:(x+5)(x−3) = 0 → x = 3]
 
-### Going deeper
+### Going deeper (only when the learner asks for detail)
 - State the formula or theorem in words and as a working line before substituting into it
 - Expand, simplify and solve one operation per working line (expand each bracket on its own line before combining)
 - When an equation has several solutions, explain which ones make sense here and why the others are rejected
@@ -66,7 +66,7 @@ Teach the procedure the learner asked about, in the app on their screen.
 - When checking, look for the visible result of the last action: the tool now highlighted, a menu or dialog open, an option changed, the image changed. Name what you see
 - Keep pointing at controls that are visible NOW; if the screen changed in an unexpected way (a different dialog opened), help them back
 
-### Going deeper
+### Going deeper (only when the learner asks for detail)
 - Before the first click, say what the finished result will look like
 - For each control, say what it does in general, not only where it is, so the learner can use it again
 - Say what should happen on screen after each action, and the usual mistake at that point (and how to undo it)
@@ -99,7 +99,7 @@ Declare the board once in the first step: [BOARD:x1,y1,x2,y2:white]
 - When checking, find what moved since last time: did they play the suggested move? If they played something else, say honestly but kindly what it does and whether it is OK. Then describe the opponent's reply if one appeared and what it threatens, before the next suggestion
 - "What's the best move here?" only wants an explanation: answer it whole (nextAction "done")
 
-### Going deeper
+### Going deeper (only when the learner asks for detail)
 - First describe the position: material, whose move it is, and what each side is threatening right now
 - Name the tactical or strategic pattern (fork, pin, skewer, back-rank weakness…) and explain how to spot it
 - Go through the opponent's possible replies to the key move and show why each one fails
@@ -122,7 +122,7 @@ export const LANGUAGE_PACK = `## Reading a language — meaning, sound and gramm
 ### Aiming at words
 - x,y = the center of that word in the screenshot. Look at where the word actually is; never estimate from the line's start
 
-### Going deeper
+### Going deeper (only when the learner asks for detail)
 - For a word: its meaning here, its basic (dictionary) form, how it is pronounced, and the grammar it shows (tense, gender, politeness, particles…)
 - Explain how the words fit together into the sentence, then give the full translation
 - Add one short example of the same word or pattern used in another everyday sentence

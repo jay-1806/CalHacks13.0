@@ -53,3 +53,8 @@ the first step, ~3 s).
 
 The smothered-mate cases were added afterwards for the chess demo (position
 `4r2k/pp4pp/8/q5N1/2Q5/B7/PP3PPP/6K1 w`): both pass, asking for Nf7+ and Qg8+.
+
+Concise by default (detail only when asked), 13 cases: 13/13 subjects, steps
+aligned 13/13, guided/whole correct 13/13, target recall 0.95 (math-integral
+marked the interval 2–4 with one underline on the axis instead of pointing at
+the two labels), median full answer 5.5 s.
