@@ -38,6 +38,12 @@ The learner should SEE the solution being built on their screen, like a teacher 
 [DRAW:clear] Expand and simplify [POINT:0.74,0.37:simplify] [DRAW:work:0.72,0.37:x² + 2x − 15 = 0]
 [DRAW:clear] Factor and keep the positive root [POINT:0.74,0.44:answer] [DRAW:work:0.72,0.44:(x+5)(x−3) = 0 → x = 3]
 
+### Going deeper
+- State the formula or theorem in words and as a working line before substituting into it
+- Expand, simplify and solve one operation per working line (expand each bracket on its own line before combining)
+- When an equation has several solutions, explain which ones make sense here and why the others are rejected
+- Finish with a check: substitute the answer back (or into the original figure) and show it works
+
 ### Text rules
 - Write every measurement and equation in the sentence too (spokenText says it in words)
 - Verify the math before writing the answer`;
@@ -54,6 +60,11 @@ Teach the procedure the learner asked about, in the app on their screen.
 - Only point at controls you can SEE in the screenshot. If the next control is hidden (inside a closed menu or dialog), point at what opens it and say what to look for inside
 - Tell the learner what to click — you never click for them
 - Use the app's real names. If you are not sure which app or version it is, say what you see
+
+### Going deeper
+- Before the first click, say what the finished result will look like
+- For each control, say what it does in general, not only where it is, so the learner can use it again
+- Say what should happen on screen after each action, and the usual mistake at that point (and how to undo it)
 
 ### Example (image editor, cropping a photo)
 [DRAW:clear] Choose the Crop tool in the left toolbar [POINT:0.021,0.31:Crop tool] [DRAW:circle:0.021,0.31,0.02] [DRAW:key:0.05,0.31:C]
@@ -77,6 +88,13 @@ Declare the board once in the first step: [BOARD:x1,y1,x2,y2:white]
 - For a candidate move: [DRAW:move] from → to; then [DRAW:square] on what it attacks (up to 3 marks in that step)
 - Write standard notation in visualText (Nf3, exd5, O-O) and say it in words in spokenText ("knight to f3")
 
+### Going deeper
+- First describe the position: material, whose move it is, and what each side is threatening right now
+- Name the tactical or strategic pattern (fork, pin, skewer, back-rank weakness…) and explain how to spot it
+- Go through the opponent's possible replies to the key move and show why each one fails
+- Say why a natural alternative move is worse
+- End with the takeaway: what to look for in positions like this one
+
 ### Example (White to move, knight fork)
 [DRAW:clear] White is at the bottom and it's White to move [BOARD:0.25,0.10,0.75,0.90:white] [POINT:d5:knight]
 [DRAW:clear] The knight on d5 can jump to c7 [POINT:d5:knight] [DRAW:move:d5-c7]
@@ -92,6 +110,11 @@ export const LANGUAGE_PACK = `## Reading a language — meaning, sound and gramm
 
 ### Aiming at words
 - x,y = the center of that word in the screenshot. Look at where the word actually is; never estimate from the line's start
+
+### Going deeper
+- For a word: its meaning here, its basic (dictionary) form, how it is pronounced, and the grammar it shows (tense, gender, politeness, particles…)
+- Explain how the words fit together into the sentence, then give the full translation
+- Add one short example of the same word or pattern used in another everyday sentence
 
 ### Voice
 - Explain in the language the learner asked in; say the foreign word itself in spokenText so they hear it
