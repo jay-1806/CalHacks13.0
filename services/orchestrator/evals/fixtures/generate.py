@@ -364,6 +364,45 @@ def chess_guided():
     })
 
 
+SMOTHERED = {  # 4r2k/pp4pp/8/q5N1/2Q5/B7/PP3PPP/6K1 w - - 0 1
+    'e8': 'r', 'h8': 'k', 'a7': 'p', 'b7': 'p', 'g7': 'p', 'h7': 'p', 'a5': 'q',
+    'g5': 'N', 'c4': 'Q', 'a3': 'B', 'a2': 'P', 'b2': 'P', 'f2': 'P', 'g2': 'P', 'h2': 'P', 'g1': 'K',
+}
+
+
+def chess_smothered():
+    # The demo line, Philidor's smothered mate: 1.Nf7+ Kg8 2.Nh6+ Kh8 3.Qg8+ Rxg8 4.Nf7#.
+    # Every Black reply is forced. Turn 1 must find Nf7+; turn 3 the queen sacrifice.
+    box = chess('white', dict(SMOTHERED), 'chess-smothered-start.png')
+    cases.append({
+        'id': 'chess-smothered-start',
+        'image': 'chess-smothered-start.png',
+        'question': 'Help me play this position, step by step.',
+        'subject': 'chess',
+        'expectNext': 'wait',
+        'targets': [
+            {'name': 'knight on g5', 'box': box('g5')},
+            {'name': 'check square f7', 'box': box('f7')},
+        ],
+    })
+    turn3 = dict(SMOTHERED)
+    del turn3['g5']
+    turn3['h6'] = 'N'
+    box = chess('white', turn3, 'chess-smothered-sacrifice.png')
+    cases.append({
+        'id': 'chess-smothered-sacrifice',
+        'image': 'chess-smothered-sacrifice.png',
+        'question': 'I played it.',
+        'subject': 'chess',
+        'guide': {'goal': 'Help me play this position, step by step.', 'step': 2, 'lastInstruction': 'Play Nh6+'},
+        'expectNext': 'wait',
+        'targets': [
+            {'name': 'queen on c4', 'box': box('c4')},
+            {'name': 'sacrifice square g8', 'box': box('g8')},
+        ],
+    })
+
+
 # ── Language reading ────────────────────────────────────────────────────────
 def language_spanish():
     img = Image.new('RGB', (W, H), '#fbf8f1')
@@ -420,6 +459,7 @@ if __name__ == '__main__':
     chess('white')
     chess('black')
     chess_guided()
+    chess_smothered()
     language_spanish()
     language_japanese()
     # Explanations are answered whole; "how do I" tasks start a guided lesson.

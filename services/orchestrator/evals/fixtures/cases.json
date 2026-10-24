@@ -320,6 +320,65 @@
       ]
     },
     {
+      "id": "chess-smothered-start",
+      "image": "chess-smothered-start.png",
+      "question": "Help me play this position, step by step.",
+      "subject": "chess",
+      "expectNext": "wait",
+      "targets": [
+        {
+          "name": "knight on g5",
+          "box": [
+            0.6083,
+            0.4037,
+            0.6625,
+            0.5
+          ]
+        },
+        {
+          "name": "check square f7",
+          "box": [
+            0.5542,
+            0.2111,
+            0.6083,
+            0.3074
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chess-smothered-sacrifice",
+      "image": "chess-smothered-sacrifice.png",
+      "question": "I played it.",
+      "subject": "chess",
+      "guide": {
+        "goal": "Help me play this position, step by step.",
+        "step": 2,
+        "lastInstruction": "Play Nh6+"
+      },
+      "expectNext": "wait",
+      "targets": [
+        {
+          "name": "queen on c4",
+          "box": [
+            0.3917,
+            0.5,
+            0.4458,
+            0.5963
+          ]
+        },
+        {
+          "name": "sacrifice square g8",
+          "box": [
+            0.6083,
+            0.1148,
+            0.6625,
+            0.2111
+          ]
+        }
+      ]
+    },
+    {
       "id": "language-spanish",
       "image": "language-spanish.png",
       "question": "What does 'cerrada' mean in this sentence?",

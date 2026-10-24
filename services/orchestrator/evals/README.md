@@ -41,6 +41,8 @@ function there, run `python generate.py`, and commit the PNG and `cases.json`.
 | chess-fork-black-bottom | chess | same position, board flipped |
 | chess-guided-start | chess | "help me play this": guides Nc7+ and waits |
 | chess-guided-next | chess | after Nc7+ Kd7: the knight on c7 and Nxa8 |
+| chess-smothered-start | chess | demo line, Philidor's smothered mate: guides Nf7+ (knight g5, square f7) |
+| chess-smothered-sacrifice | chess | after 1.Nf7+ Kg8 2.Nh6+ Kh8: the queen sacrifice Qg8+ (queen c4, square g8) |
 | language-spanish | language | the word "cerrada" |
 | language-japanese | language | the word 飲みます |
 
@@ -48,3 +50,6 @@ Latest (2026-10-24, claude-opus-5-5, subject auto-detected, detailed teaching,
 guided lessons): 11/11 subjects, target recall 1.0, steps aligned 11/11,
 guided/whole correct 11/11, median full answer 10.5 s (the voice starts after
 the first step, ~3 s).
+
+The smothered-mate cases were added afterwards for the chess demo (position
+`4r2k/pp4pp/8/q5N1/2Q5/B7/PP3PPP/6K1 w`): both pass, asking for Nf7+ and Qg8+.
