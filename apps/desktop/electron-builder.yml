@@ -1,0 +1,25 @@
+appId: ai.screentutor.desktop
+productName: ScreenTutor AI
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# koffi ships prebuilt native binaries; they cannot be loaded from inside app.asar.
+asarUnpack:
+  - '**/node_modules/koffi/**'
+mac:
+  category: public.app-category.education
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: ScreenTutor AI listens while you hold the hotkey so you can ask questions by voice.
+    NSScreenCaptureUsageDescription: ScreenTutor AI captures your screen only when you ask, so it can explain what you are looking at.
+win:
+  target: nsis
