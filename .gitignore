@@ -11,3 +11,6 @@ out/
 # macOS / packaging
 .DS_Store
 release/
+
+# Local visual QA exports (do not commit)
+apps/desktop/build/qa-*.png

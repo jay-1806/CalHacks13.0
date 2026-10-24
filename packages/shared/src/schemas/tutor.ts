@@ -7,7 +7,7 @@ import { SessionTurn } from './memory.js';
 // ---------------------------------------------------------------------------
 
 /**
- * ScreenTutor currently does one thing: explain and work a math problem on screen.
+ * Quicky.AI currently does one thing: explain and work a math problem on screen.
  * `mode` stays as the extension point for future lesson types (and matches the
  * `mode` already stored in learner memory).
  */

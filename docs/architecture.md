@@ -1,6 +1,6 @@
-# Architecture — ScreenTutor AI
+# Architecture — Quicky.AI
 
-ScreenTutor explains and solves math problems on your screen. It is a pnpm monorepo with three parts:
+Quicky.AI explains and solves math problems on your screen. It is a pnpm monorepo with three parts:
 
 | Part | Path | Language | Role |
 |---|---|---|---|

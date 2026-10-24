@@ -1,11 +1,37 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type PointerEvent } from 'react';
 import MemoryPanel from './MemoryPanel';
 import SponsorStatusPanel from './SponsorStatusPanel';
 import DemoLessonsPanel from './DemoLessonsPanel';
-import { DEMO_LESSONS, type DemoLesson } from '@screentutor/shared';
+import {
+  DEMO_LESSONS,
+  PRODUCT_DISPLAY_NAME,
+  canRestoreOnScreenExplanation,
+  isTutorProcessingPhase,
+  shouldShowExplanationHandoff,
+  type DemoLesson,
+} from '@screentutor/shared';
 import { getScreenMetadata } from '../hooks/useScreenCapture';
 import type { ChatTurn } from '../hooks/useChatHistory';
 import type { StoredExplanation } from '../types/explanation';
+import {
+  ClearOverlayIcon,
+  CloseIcon,
+  EmptyMarkIcon,
+  LessonsIcon,
+  MemoryIcon,
+  MicPanelIcon,
+  MinimizeIcon,
+  RegionActiveIcon,
+  RegionIcon,
+  ResetIcon,
+  SendIcon,
+  ShieldIcon,
+  SpeakerIcon,
+  SpeakerMutedIcon,
+  SpinnerIcon,
+} from './ui/panelIcons';
+import { ExplanationHandoffCard, TutorProcessingStatus } from './TutorStatusCards';
+import TutorCursorIcon from './TutorCursorIcon';
 import './ChatPanel.css';
 import { HOLD_HOTKEY_LABEL } from '../platform';
 
@@ -31,7 +57,7 @@ interface Props {
   setActiveLessonId: (id: string | undefined) => void;
   onStartVoiceRecording: () => Promise<void>;
   onStopVoiceRecording: () => Promise<void>;
-  
+
   question: string;
   setQuestion: (q: string) => void;
   onResetDemo: () => void;
@@ -44,6 +70,8 @@ interface Props {
   isSelectingRegion?: boolean;
   onStartRegionSelect?: () => Promise<void>;
   onClearRegion?: () => void;
+  /** Increment to focus the question input (Quicky.AI Text action). */
+  focusInputToken?: number;
 }
 
 export default function ChatPanel({
@@ -77,12 +105,14 @@ export default function ChatPanel({
   isSelectingRegion,
   onStartRegionSelect,
   onClearRegion,
+  focusInputToken = 0,
 }: Props) {
   const chatThreadRef = useRef<HTMLDivElement>(null);
+  const questionInputRef = useRef<HTMLInputElement>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [showSponsors, setShowSponsors] = useState(false);
   const [showDemoLessons, setShowDemoLessons] = useState(false);
-  const activeLesson = activeLessonId ? DEMO_LESSONS.find(l => l.id === activeLessonId) : undefined;
+  const activeLesson = activeLessonId ? DEMO_LESSONS.find((l) => l.id === activeLessonId) : undefined;
 
   const micHoldingRef = useRef(false);
   const micReleaseCleanupRef = useRef<(() => void) | null>(null);
@@ -92,7 +122,7 @@ export default function ChatPanel({
     micReleaseCleanupRef.current = null;
   };
 
-  const handleMicPointerDown = async (e: React.PointerEvent<HTMLButtonElement>) => {
+  const handleMicPointerDown = async (e: PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (isConversationBusy || micHoldingRef.current || isRecordingVoice) return;
 
@@ -133,25 +163,23 @@ export default function ChatPanel({
   useEffect(() => () => clearMicReleaseListeners(), []);
 
   useEffect(() => {
+    if (!focusInputToken) return;
+    const id = window.setTimeout(() => questionInputRef.current?.focus(), 40);
+    return () => window.clearTimeout(id);
+  }, [focusInputToken]);
+
+  useEffect(() => {
     const el = chatThreadRef.current;
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
   }, [chatTurns, response, isLoading, isSpeaking]);
 
-  const getStatusLabel = (phase: ChatTurn['aiPhase']) => {
-    switch (phase) {
-      case 'scanning': return 'Scanning...';
-      case 'thinking': return 'Thinking...';
-      case 'outputting': return 'Outputting response...';
-      default: return '';
-    }
-  };
-
-  const activeTurn = chatTurns.find(t => t.id === activeTurnId);
+  const activeTurn = chatTurns.find((t) => t.id === activeTurnId);
   const isConversationBusy = activeTurn != null && !['done', 'error'].includes(activeTurn.aiPhase);
+  const canSend = !isLoading && !isConversationBusy && Boolean(question.trim());
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmed = question.trim();
     if (!trimmed) return;
@@ -205,27 +233,53 @@ export default function ChatPanel({
       <div className="chat-header drag-region">
         <div className="header-top">
           <div className="header-left">
-            <h3>ScreenTutor</h3>
+            <TutorCursorIcon size={22} className="header-brand-mark" />
+            <h3 className="header-brand-name">{PRODUCT_DISPLAY_NAME}</h3>
+            {isSpeaking && !isMuted && (
+              <span className="header-live-hint" aria-live="polite">
+                Speaking…
+              </span>
+            )}
           </div>
-          <button className="icon-btn close-btn no-drag" onClick={onClose} title="Minimize">
-            −
+          <button
+            type="button"
+            className="icon-btn close-btn no-drag"
+            onClick={onClose}
+            title="Minimize"
+            aria-label="Minimize panel"
+          >
+            <MinimizeIcon />
           </button>
         </div>
-        <div className="header-toolbar no-drag">
-          <button className={`icon-btn ${isMuted ? 'active' : ''}`} onClick={() => {
-            const next = !isMuted;
-            setIsMuted(next);
-            localStorage.setItem('screentutor_muted', String(next));
-            if (next) {
-              window.speechSynthesis?.cancel();
-            }
-          }} title={isMuted ? 'Unmute TTS' : 'Mute TTS'}>
-            {isMuted ? '🔇' : '🔊'}
-          </button>
-          <button className="icon-btn clear-overlay-btn" onClick={() => window.electronAPI.clearOverlay()} title="Clear Overlay">
-            🧹
+        <div className="header-toolbar no-drag" role="toolbar" aria-label="Tutor tools">
+          <button
+            type="button"
+            className={`icon-btn ${isMuted ? 'active' : ''}`}
+            onClick={() => {
+              const next = !isMuted;
+              setIsMuted(next);
+              localStorage.setItem('screentutor_muted', String(next));
+              if (next) {
+                window.speechSynthesis?.cancel();
+              }
+            }}
+            title={isMuted ? 'Unmute TTS' : 'Mute TTS'}
+            aria-label={isMuted ? 'Unmute TTS' : 'Mute TTS'}
+            aria-pressed={isMuted}
+          >
+            {isMuted ? <SpeakerMutedIcon /> : <SpeakerIcon />}
           </button>
           <button
+            type="button"
+            className="icon-btn clear-overlay-btn"
+            onClick={() => window.electronAPI.clearOverlay()}
+            title="Clear Overlay"
+            aria-label="Clear overlay annotations"
+          >
+            <ClearOverlayIcon />
+          </button>
+          <button
+            type="button"
             className={`icon-btn region-select-btn ${isRegionCapture ? 'active' : ''}`}
             onClick={() => {
               if (isRegionCapture && onClearRegion) {
@@ -235,53 +289,102 @@ export default function ChatPanel({
               }
             }}
             disabled={isSelectingRegion || isLoading}
-            title={isRegionCapture ? 'Clear selected area (use full screen)' : 'Select area of screen to ask about'}
+            title={isRegionCapture ? 'Clear area' : 'Select area'}
+            aria-label={
+              isSelectingRegion
+                ? 'Selecting screen region'
+                : isRegionCapture
+                  ? 'Clear selected screen area'
+                  : 'Select screen area to ask about'
+            }
+            aria-pressed={!!isRegionCapture}
           >
-            {isSelectingRegion ? '⏳' : isRegionCapture ? '▣' : '▢'}
+            {isSelectingRegion ? <SpinnerIcon /> : isRegionCapture ? <RegionActiveIcon /> : <RegionIcon />}
           </button>
-          <button className="icon-btn demo-reset-btn" onClick={() => {
-            setShowMemory(false);
-            setShowSponsors(false);
-            setShowDemoLessons(false);
-            onResetDemo();
-          }} title="Reset Demo Environment">
-            🔄
+          <button
+            type="button"
+            className="icon-btn demo-reset-btn"
+            onClick={() => {
+              setShowMemory(false);
+              setShowSponsors(false);
+              setShowDemoLessons(false);
+              onResetDemo();
+            }}
+            title="Reset Demo Environment"
+            aria-label="Reset demo environment"
+          >
+            <ResetIcon />
           </button>
-          <button className={`icon-btn ${showDemoLessons ? 'active' : ''}`} onClick={handleToggleDemoLessons} title="Demo Lessons">
-            🎓
+          <button
+            type="button"
+            className={`icon-btn ${showDemoLessons ? 'active' : ''}`}
+            onClick={handleToggleDemoLessons}
+            title="Demo Lessons"
+            aria-label="Demo lessons"
+            aria-pressed={showDemoLessons}
+          >
+            <LessonsIcon />
           </button>
-          <button className={`icon-btn ${showSponsors ? 'active' : ''}`} onClick={handleToggleSponsors} title="Sponsors">
-            🛡️
+          <button
+            type="button"
+            className={`icon-btn ${showSponsors ? 'active' : ''}`}
+            onClick={handleToggleSponsors}
+            title="Sponsors"
+            aria-label="Sponsor status"
+            aria-pressed={showSponsors}
+          >
+            <ShieldIcon />
           </button>
-          <button className={`icon-btn ${showMemory ? 'active' : ''}`} onClick={handleToggleMemory} title="Memory">
-            🧠
+          <button
+            type="button"
+            className={`icon-btn ${showMemory ? 'active' : ''}`}
+            onClick={handleToggleMemory}
+            title="Memory"
+            aria-label="Memory settings"
+            aria-pressed={showMemory}
+          >
+            <MemoryIcon />
           </button>
         </div>
       </div>
 
       <div className="chat-content">
         {showMemory ? (
-          <MemoryPanel userId="user_123" />
+          <div className="aux-panel-host">
+            <MemoryPanel userId="user_123" />
+          </div>
         ) : showSponsors ? (
-          <SponsorStatusPanel />
+          <div className="aux-panel-host">
+            <SponsorStatusPanel />
+          </div>
         ) : showDemoLessons ? (
-          <DemoLessonsPanel
-            onSelectQuestion={handleSelectDemoQuestion}
-            onClose={() => setShowDemoLessons(false)}
-          />
+          <div className="aux-panel-host">
+            <DemoLessonsPanel
+              onSelectQuestion={handleSelectDemoQuestion}
+              onClose={() => setShowDemoLessons(false)}
+            />
+          </div>
         ) : (
           <>
             {activeLesson && (
               <div className="active-lesson-banner">
                 <div className="active-lesson-info">
-                  <span className="active-lesson-emoji">{activeLesson.emoji}</span>
+                  <span className="active-lesson-emoji" aria-hidden="true">
+                    {activeLesson.emoji}
+                  </span>
                   <div>
                     <div className="active-lesson-title">Demo Lesson Active</div>
                     <div className="active-lesson-preview-text">{activeLesson.content}</div>
                   </div>
                 </div>
-                <button className="clear-lesson-btn" onClick={handleClearLesson} title="Clear Active Lesson">
-                  ✕
+                <button
+                  type="button"
+                  className="clear-lesson-btn"
+                  onClick={handleClearLesson}
+                  title="Clear Active Lesson"
+                  aria-label="Clear active lesson"
+                >
+                  <CloseIcon />
                 </button>
               </div>
             )}
@@ -289,35 +392,22 @@ export default function ChatPanel({
             <div className="chat-thread" ref={chatThreadRef}>
               {chatTurns.length === 0 && (
                 <div className="chat-empty-state">
-                  Ask a question about your screen to start a conversation.
+                  <div className="chat-empty-mark" aria-hidden="true">
+                    <EmptyMarkIcon />
+                  </div>
+                  <p className="chat-empty-title">Ready when you are.</p>
+                  <p className="chat-empty-copy">Ask about your screen.</p>
                 </div>
               )}
 
-              {chatTurns.map(turn => (
+              {chatTurns.map((turn) => (
                 <div key={turn.id} className="chat-turn">
                   <div className="chat-message chat-message-user">
                     <div className="chat-bubble user-bubble">{turn.userText}</div>
                   </div>
 
                   <div className="chat-message chat-message-ai">
-                    {turn.aiPhase === 'done' && turn.reference ? (
-                      turn.explanation ? (
-                        <button
-                          type="button"
-                          className={`chat-bubble ai-bubble reference-bubble reference-btn ${turn.explanation.visible ? 'active' : ''}`}
-                          onClick={() => onRestoreExplanation(turn.id, turn.explanation!)}
-                          title="Show explanation on screen"
-                        >
-                          <span className="reference-icon" aria-hidden="true">📘</span>
-                          <span className="reference-text">{turn.reference}</span>
-                        </button>
-                      ) : (
-                        <div className="chat-bubble ai-bubble reference-bubble">
-                          <span className="reference-icon" aria-hidden="true">📘</span>
-                          <span className="reference-text">{turn.reference}</span>
-                        </div>
-                      )
-                    ) : turn.aiPhase === 'error' ? (
+                    {turn.aiPhase === 'error' ? (
                       <div className="chat-bubble ai-bubble error-bubble">
                         <span>{turn.error || error}</span>
                         {turn.id === activeTurnId && (
@@ -325,23 +415,35 @@ export default function ChatPanel({
                             type="button"
                             className="retry-btn no-drag"
                             onClick={() => {
-                              const devOverride = localStorage.getItem('screentutor_dev_override_redaction') === 'true';
-                              askQuestion(turn.userText, screenshot?.base64, getScreenMetadata(screenshot), activeLessonId, devOverride);
+                              const devOverride =
+                                localStorage.getItem('screentutor_dev_override_redaction') === 'true';
+                              askQuestion(
+                                turn.userText,
+                                screenshot?.base64,
+                                getScreenMetadata(screenshot),
+                                activeLessonId,
+                                devOverride
+                              );
                             }}
                           >
-                            🔄 Retry
+                            Retry
                           </button>
                         )}
                       </div>
-                    ) : turn.aiPhase === 'outputting' && turn.id === activeTurnId ? (
-                      <div className="chat-bubble ai-bubble outputting-bubble">
-                        <div className="chat-status-label animate-pulse">{getStatusLabel(turn.aiPhase)}</div>
-                      </div>
-                    ) : (
-                      <div className="chat-bubble ai-bubble status-bubble animate-pulse">
-                        {getStatusLabel(turn.aiPhase)}
-                      </div>
-                    )}
+                    ) : isTutorProcessingPhase(turn.aiPhase) ? (
+                      <TutorProcessingStatus phase={turn.aiPhase} />
+                    ) : shouldShowExplanationHandoff(turn) ? (
+                      <ExplanationHandoffCard
+                        reference={turn.reference!}
+                        canRestore={canRestoreOnScreenExplanation(turn)}
+                        visible={turn.explanation?.visible}
+                        onShowOnScreen={
+                          canRestoreOnScreenExplanation(turn)
+                            ? () => onRestoreExplanation(turn.id, turn.explanation!)
+                            : undefined
+                        }
+                      />
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -351,46 +453,58 @@ export default function ChatPanel({
       </div>
 
       {isRecordingVoice ? (
-        <div className="voice-recording-overlay no-drag">
-          <div className="waveform-container">
-            <span className="waveform-bar bar1"></span>
-            <span className="waveform-bar bar2"></span>
-            <span className="waveform-bar bar3"></span>
-            <span className="waveform-bar bar4"></span>
-            <span className="waveform-bar bar5"></span>
+        <div className="voice-recording-overlay no-drag" role="status" aria-live="polite">
+          <div className="waveform-container" aria-hidden="true">
+            <span className="waveform-bar bar1" />
+            <span className="waveform-bar bar2" />
+            <span className="waveform-bar bar3" />
+            <span className="waveform-bar bar4" />
+            <span className="waveform-bar bar5" />
           </div>
-          <span className="voice-recording-text">Listening… release {HOLD_HOTKEY_LABEL} or the mic button to send</span>
+          <span className="voice-recording-text">
+            Listening…
+          </span>
         </div>
       ) : (
-        !showMemory && !showSponsors && (
+        !showMemory &&
+        !showSponsors && (
           <>
             {isRegionCapture && (
-              <div className="region-hint no-drag">Asking about selected screen area only</div>
+              <div className="region-hint no-drag">Area captured</div>
             )}
             {isSelectingRegion && (
-              <div className="region-hint no-drag">Drag on screen to select an area…</div>
+              <div className="region-hint no-drag">Drag to capture</div>
             )}
-          <form className="chat-input no-drag" onSubmit={handleSubmit}>
-            <button
-              type="button"
-              className="mic-btn no-drag"
-              onPointerDown={handleMicPointerDown}
-              disabled={isLoading || isConversationBusy}
-              title="Hold to speak"
-            >
-              🎤
-            </button>
-            <input
-              type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask about your screen..."
-              disabled={isLoading || isConversationBusy}
-            />
-            <button type="submit" disabled={isLoading || isConversationBusy || !question.trim()}>
-              Send
-            </button>
-          </form>
+            <form className="chat-input no-drag" onSubmit={handleSubmit}>
+              <button
+                type="button"
+                className="mic-btn no-drag"
+                onPointerDown={handleMicPointerDown}
+                disabled={isLoading || isConversationBusy}
+                title={`Hold to speak (${HOLD_HOTKEY_LABEL})`}
+                aria-label={`Hold to speak using ${HOLD_HOTKEY_LABEL}`}
+              >
+                <MicPanelIcon />
+              </button>
+              <input
+                ref={questionInputRef}
+                type="text"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask anything..."
+                disabled={isLoading || isConversationBusy}
+                aria-label="Ask anything"
+              />
+              <button
+                type="submit"
+                className="send-btn"
+                disabled={!canSend}
+                aria-label="Send question"
+              >
+                <SendIcon />
+                <span>Send</span>
+              </button>
+            </form>
           </>
         )
       )}

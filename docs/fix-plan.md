@@ -1,6 +1,8 @@
-# ScreenTutor Fix Plan
+# Quicky.AI Fix Plan
 
-> **Scope update (Oct 24, 2026):** ScreenTutor now focuses only on explaining and solving math problems. The tutor modes (hint, mistake, quiz, review, research, Co-drive), the Fetch.ai agent and Apify were removed, so items below that depend on them (for example the Fetch.ai "concepts due today" and Co-drive input) no longer apply. Issue 4 was delivered as a cross-platform Electron app rather than a Tauri port.
+> **Brand (Oct 24, 2026):** Product display name is **Quicky.AI** (formerly ScreenTutor / Quicke.AI in drafts).
+>
+> **Scope update (Oct 24, 2026):** Quicky.AI now focuses only on explaining and solving math problems. The tutor modes (hint, mistake, quiz, review, research, Co-drive), the Fetch.ai agent and Apify were removed, so items below that depend on them (for example the Fetch.ai "concepts due today" and Co-drive input) no longer apply. Issue 4 was delivered as a cross-platform Electron app rather than a Tauri port.
 
 Diagnostics for the four issues found in testing, the fix for each, and how four teammates can work on them at the same time without stepping on each other's files.
 

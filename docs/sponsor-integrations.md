@@ -1,6 +1,6 @@
-# Sponsor Integrations — ScreenTutor AI (Cal Hacks 13.0)
+# Sponsor Integrations — Quicky.AI (Cal Hacks 13.0)
 
-ScreenTutor explains and solves math problems on screen. Six technologies power it.
+Quicky.AI explains and solves math problems on screen. Six technologies power it.
 
 Every integration sits behind an interface with a local fallback, so the app runs with no keys and each sponsor lights up as soon as its env vars are set. The in-app **Sponsor Integration Registry** panel (`GET /api/sponsors/status`) shows each one as `real`, `mock`, `error` or `disabled`.
 

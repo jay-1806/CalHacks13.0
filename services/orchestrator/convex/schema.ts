@@ -38,7 +38,7 @@ export const sessionTurn = v.object({
 });
 
 /**
- * Learner memory for ScreenTutor. Weak concepts get their own table so an
+ * Learner memory for Quicky.AI. Weak concepts get their own table so an
  * update to one concept is a single-row transaction, not a whole-profile rewrite.
  */
 export default defineSchema({

@@ -63,6 +63,17 @@ export function useChatHistory() {
     activeTurnIdRef.current = null;
   }, []);
 
+  /** Mark the active turn failed (e.g. capture blocked) so the composer unlocks. */
+  const failActiveTurn = useCallback((message: string) => {
+    const id = activeTurnIdRef.current;
+    if (!id) return;
+    setTurns((prev) =>
+      prev.map((turn) =>
+        turn.id === id ? { ...turn, aiPhase: 'error' as const, error: message } : turn
+      )
+    );
+  }, []);
+
   const syncActiveTurn = useCallback((params: {
     isScanning: boolean;
     isLoading: boolean;
@@ -133,5 +144,14 @@ export function useChatHistory() {
     }));
   }, []);
 
-  return { turns, activeTurnId, startTurn, resetTurns, syncActiveTurn, updateTurnExplanation, setTurnExplanation };
+  return {
+    turns,
+    activeTurnId,
+    startTurn,
+    resetTurns,
+    failActiveTurn,
+    syncActiveTurn,
+    updateTurnExplanation,
+    setTurnExplanation,
+  };
 }

@@ -1,0 +1,127 @@
+@property --quicke-shine-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.quicke-liquid-metal {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--st-radius-full);
+  overflow: visible;
+  isolation: isolate;
+  box-shadow: var(--st-shadow-launcher);
+  --quicke-shine-angle: 0deg;
+}
+
+/*
+ * Thin chrome rim (~2px) with a single silver specular that travels the
+ * circumference. Masked so only the border ring is painted — not the face.
+ */
+.quicke-liquid-metal__rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  box-sizing: border-box;
+  background: conic-gradient(
+    from var(--quicke-shine-angle),
+    var(--st-metal-rim-track) 0deg,
+    var(--st-metal-rim-track) 268deg,
+    var(--st-metal-rim-shine-soft) 300deg,
+    var(--st-metal-rim-shine) 328deg,
+    var(--st-metal-rim-shine-soft) 348deg,
+    var(--st-metal-rim-track) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: quicke-rim-shine var(--st-rim-shine-duration) linear infinite;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Listening / thinking / speaking: slightly brighter specular, still silver. */
+.quicke-liquid-metal.is-active .quicke-liquid-metal__rim {
+  background: conic-gradient(
+    from var(--quicke-shine-angle),
+    rgba(180, 188, 200, 0.42) 0deg,
+    rgba(180, 188, 200, 0.42) 250deg,
+    rgba(245, 248, 252, 0.7) 292deg,
+    rgba(255, 255, 255, 0.98) 324deg,
+    rgba(245, 248, 252, 0.7) 346deg,
+    rgba(180, 188, 200, 0.42) 360deg
+  );
+}
+
+@keyframes quicke-rim-shine {
+  to {
+    --quicke-shine-angle: 360deg;
+  }
+}
+
+.quicke-liquid-metal__shader {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.quicke-liquid-metal__shader canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit;
+}
+
+.quicke-liquid-metal__fallback {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 1;
+  background:
+    radial-gradient(120% 90% at 28% 22%, var(--st-metal-hi) 0%, transparent 55%),
+    radial-gradient(100% 80% at 78% 78%, rgba(80, 90, 110, 0.35) 0%, transparent 50%),
+    linear-gradient(145deg, #e8ebf0 0%, var(--st-metal-mid) 48%, var(--st-metal-lo) 100%);
+}
+
+.quicke-liquid-metal__glyph {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(26, 31, 46, 0.72);
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35));
+  pointer-events: none;
+  transition: color var(--st-duration-med) var(--st-ease-out);
+}
+
+.quicke-liquid-metal.is-active .quicke-liquid-metal__glyph {
+  color: rgba(26, 31, 46, 0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quicke-liquid-metal__rim {
+    animation: none;
+    --quicke-shine-angle: 210deg;
+    background: conic-gradient(
+      from var(--quicke-shine-angle),
+      var(--st-metal-rim-track) 0deg,
+      var(--st-metal-rim-track) 280deg,
+      var(--st-metal-rim-shine-soft) 310deg,
+      var(--st-metal-rim-shine) 330deg,
+      var(--st-metal-rim-shine-soft) 350deg,
+      var(--st-metal-rim-track) 360deg
+    );
+  }
+}

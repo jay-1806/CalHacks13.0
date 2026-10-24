@@ -4,6 +4,7 @@ patchConsole();
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import './styles/tokens.css';
 import './App.css';
 import { initRendererSentry } from './sentry';
 

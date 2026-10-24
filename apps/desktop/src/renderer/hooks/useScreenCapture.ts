@@ -46,6 +46,9 @@ export function useScreenCapture() {
   };
 
   useEffect(() => {
+    // Guard: Vite may serve this module to a non-Electron client (e.g. IDE browser on :5173).
+    if (typeof window.electronAPI?.onScreenCaptured !== 'function') return;
+
     window.electronAPI.onScreenCaptured((data: ScreenshotCapture) => {
       if (data) {
         setScreenshot(data);
