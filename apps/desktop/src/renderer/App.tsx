@@ -428,9 +428,19 @@ export default function App() {
 
   const startVoiceRecording = async (options?: { showGlow?: boolean; fromHoldHotkey?: boolean }) => {
     if (voiceSessionRef.current !== 'idle') return;
+    // Claim the session before any await: a second start (or a duplicate key event)
+    // must not open a parallel recording, and a release during the checks below
+    // is remembered (pendingStop) instead of being lost.
+    voiceSessionRef.current = 'starting';
+    pendingStopRef.current = false;
+    const abandon = () => {
+      voiceSessionRef.current = 'idle';
+      pendingStopRef.current = false;
+    };
 
     const isPrivacy = await window.electronAPI.getPrivacyMode();
     if (isPrivacy) {
+      abandon();
       setBuddyState('privacy');
       return;
     }
@@ -443,17 +453,16 @@ export default function App() {
           : await window.electronAPI.getPermissionStatus();
       if (status.microphone === 'denied' || status.microphone === 'restricted') {
         console.warn('[Quicky.AI] Microphone permission denied — voice not started');
+        abandon();
         setBuddyState('error');
         return;
       }
     } catch (err) {
       console.error('Microphone permission check failed:', err);
+      abandon();
       setBuddyState('error');
       return;
     }
-
-    voiceSessionRef.current = 'starting';
-    pendingStopRef.current = false;
 
     if (options?.fromHoldHotkey) {
       holdDictationRef.current = true;
@@ -558,29 +567,29 @@ export default function App() {
       window.electronAPI.setMainSize(COLLAPSED_SIZE, COLLAPSED_SIZE);
     }
 
-    window.electronAPI.onHoldDictationStart(async () => {
+    const offHoldStart = window.electronAPI.onHoldDictationStart(async () => {
       if (voiceSessionRef.current !== 'idle') return;
 
       performanceTracker.startSpan('total_interaction_latency');
       performanceTracker.startSpan('hotkey_to_listening');
-
-      const isPrivacy = await window.electronAPI.getPrivacyMode();
-      if (isPrivacy) {
-        setBuddyState('privacy');
-        performanceTracker.endSpan('hotkey_to_listening');
-        return;
-      }
-
-      performanceTracker.endSpan('hotkey_to_listening');
-
       // Screen capture runs on release (stopVoiceRecordingAndSubmit), not on hotkey press —
       // avoids triggering the OS screen-capture / recording UI (Windows, macOS) while holding the key.
-      await startVoiceRecordingRef.current({ showGlow: false, fromHoldHotkey: true });
+      // startVoiceRecording checks privacy mode and the microphone itself.
+      const starting = startVoiceRecordingRef.current({ showGlow: false, fromHoldHotkey: true });
+      performanceTracker.endSpan('hotkey_to_listening');
+      await starting;
     });
 
-    window.electronAPI.onHoldDictationEnd(async () => {
+    const offHoldEnd = window.electronAPI.onHoldDictationEnd(async () => {
       await stopVoiceRecordingRef.current();
     });
+
+    // Without this, StrictMode and hot reloads stack up listeners, and one key press
+    // starts several recordings that each submit a question.
+    return () => {
+      offHoldStart();
+      offHoldEnd();
+    };
   }, []);
 
   useEffect(() => {

@@ -1,4 +1,12 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+
+/** Listen on a channel; returns a function that stops listening (for effect cleanups). */
+function subscribe(channel: string, listener: (event: IpcRendererEvent, ...args: any[]) => void): () => void {
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
 
 const electronAPI = {
   /** 'darwin' | 'win32' | 'linux' — lets the UI show Cmd vs Ctrl. */
@@ -17,47 +25,47 @@ const electronAPI = {
   togglePrivacyMode: () => ipcRenderer.invoke('toggle-privacy-mode'),
   getPrivacyMode: () => ipcRenderer.invoke('get-privacy-mode'),
   onScreenCaptured: (callback: (data: any) => void) => {
-    ipcRenderer.on('onScreenCaptured', (_event, data) => callback(data));
+    return subscribe('onScreenCaptured', (_event, data) => callback(data));
   },
   onRegionSelectStart: (callback: () => void) => {
-    ipcRenderer.on('onRegionSelectStart', () => callback());
+    return subscribe('onRegionSelectStart', () => callback());
   },
   onRegionSelectCancel: (callback: () => void) => {
-    ipcRenderer.on('onRegionSelectCancel', () => callback());
+    return subscribe('onRegionSelectCancel', () => callback());
   },
   onHotkeyTriggered: (callback: () => void) => {
-    ipcRenderer.on('onHotkeyTriggered', () => callback());
+    return subscribe('onHotkeyTriggered', () => callback());
   },
   onHoldDictationStart: (callback: () => void) => {
-    ipcRenderer.on('onHoldDictationStart', () => callback());
+    return subscribe('onHoldDictationStart', () => callback());
   },
   onHoldDictationEnd: (callback: () => void) => {
-    ipcRenderer.on('onHoldDictationEnd', () => callback());
+    return subscribe('onHoldDictationEnd', () => callback());
   },
   onDictationGlow: (callback: (data: { active: boolean }) => void) => {
-    ipcRenderer.on('onDictationGlow', (_event, data) => callback(data));
+    return subscribe('onDictationGlow', (_event, data) => callback(data));
   },
   setDictationGlow: (active: boolean) => ipcRenderer.send('set-dictation-glow', active),
   onOverlayDrawings: (callback: (drawings: any[]) => void) => {
-    ipcRenderer.on('onOverlayDrawings', (_event, drawings) => callback(drawings));
+    return subscribe('onOverlayDrawings', (_event, drawings) => callback(drawings));
   },
   onOverlayPoint: (callback: (data: any) => void) => {
-    ipcRenderer.on('onOverlayPoint', (_event, data) => callback(data));
+    return subscribe('onOverlayPoint', (_event, data) => callback(data));
   },
   onOverlayClear: (callback: () => void) => {
-    ipcRenderer.on('onOverlayClear', () => callback());
+    return subscribe('onOverlayClear', () => callback());
   },
   onRestoreExplanation: (callback: (payload: any) => void) => {
-    ipcRenderer.on('onRestoreExplanation', (_event, payload) => callback(payload));
+    return subscribe('onRestoreExplanation', (_event, payload) => callback(payload));
   },
   onExplanationReady: (callback: (payload: any) => void) => {
-    ipcRenderer.on('onExplanationReady', (_event, payload) => callback(payload));
+    return subscribe('onExplanationReady', (_event, payload) => callback(payload));
   },
   onExplanationMinimized: (callback: (payload: any) => void) => {
-    ipcRenderer.on('onExplanationMinimized', (_event, payload) => callback(payload));
+    return subscribe('onExplanationMinimized', (_event, payload) => callback(payload));
   },
   onExplanationUpdated: (callback: (payload: any) => void) => {
-    ipcRenderer.on('onExplanationUpdated', (_event, payload) => callback(payload));
+    return subscribe('onExplanationUpdated', (_event, payload) => callback(payload));
   },
   setMainSize: (width: number, height: number) => ipcRenderer.send('set-main-size', width, height),
   /** Resize buddy window while preserving the user-chosen launcher center. */
@@ -110,23 +118,23 @@ const electronAPI = {
   /** Step `index` of the narration started being heard: the overlay shows that step. */
   overlayNarrationStep: (index: number) => ipcRenderer.send('overlay-narration-step', index),
   onOverlayNarrationStep: (callback: (index: number) => void) => {
-    ipcRenderer.on('onOverlayNarrationStep', (_event, index) => callback(index));
+    return subscribe('onOverlayNarrationStep', (_event, index) => callback(index));
   },
   onOverlayNarrationStart: (callback: (payload: {
     spokenText: string;
     overlayText: string;
     captureRegion?: { x: number; y: number; width: number; height: number } | null;
   }) => void) => {
-    ipcRenderer.on('onOverlayNarrationStart', (_event, payload) => callback(payload));
+    return subscribe('onOverlayNarrationStart', (_event, payload) => callback(payload));
   },
   onOverlayNarrationFinish: (callback: () => void) => {
-    ipcRenderer.on('onOverlayNarrationFinish', () => callback());
+    return subscribe('onOverlayNarrationFinish', () => callback());
   },
   flyToPoint: (x: number, y: number, screenNumber?: number, text?: string) => ipcRenderer.send('fly-to-point', x, y, screenNumber, text),
   getSentryConfig: () => ipcRenderer.invoke('get-sentry-config'),
   simulateOverlayError: () => ipcRenderer.send('simulate-overlay-error'),
   onTriggerOverlayError: (callback: () => void) => {
-    ipcRenderer.on('trigger-overlay-error', () => callback());
+    return subscribe('trigger-overlay-error', () => callback());
   },
   getActiveWindowTitle: (): Promise<string | null> => ipcRenderer.invoke('get-active-window-title'),
   getPermissionStatus: (): Promise<{ platform: string; screen: string; microphone: string }> =>
@@ -137,15 +145,15 @@ const electronAPI = {
   openPermissionSettings: (kind: 'screen' | 'microphone') => ipcRenderer.send('open-permission-settings', kind),
   setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => ipcRenderer.send('set-ignore-mouse-events', ignore, options),
   onCursorMove: (callback: (point: { x: number; y: number }) => void) => {
-    ipcRenderer.on('cursor-move', (_event, point) => callback(point));
+    return subscribe('cursor-move', (_event, point) => callback(point));
   },
   onFlyToPoint: (callback: (point: { x: number; y: number }) => void) => {
-    ipcRenderer.on('onFlyToPoint', (_event, point) => callback(point));
+    return subscribe('onFlyToPoint', (_event, point) => callback(point));
   },
   logToServer: (message: string) => ipcRenderer.send('log-to-server', message),
   /** Help → Getting Started (native menu). */
   onOpenGettingStarted: (callback: () => void) => {
-    ipcRenderer.on('onOpenGettingStarted', () => callback());
+    return subscribe('onOpenGettingStarted', () => callback());
   },
 };
 

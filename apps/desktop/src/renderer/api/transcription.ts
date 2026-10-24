@@ -1,47 +1,11 @@
-import { DEMO_LESSONS } from '@screentutor/shared';
 import { cartesiaSocketUrl, getVoiceSession } from './voice-session';
 
 export interface TranscriptionProvider {
   startSession(): Promise<void>;
   pushAudioChunk(chunk: Blob): void;
   stopSession(): Promise<void>;
+  /** What the learner said, or '' if nothing was heard (never a made-up question). */
   getFinalTranscript(activeLessonId?: string): Promise<string>;
-}
-
-export class MockTranscriptionProvider implements TranscriptionProvider {
-  private static lastIndices: Record<string, number> = {};
-  private genericIndex = -1;
-
-  async startSession(): Promise<void> {
-    // Mock starts instantly
-  }
-
-  pushAudioChunk(_chunk: Blob): void {
-    // No-op for mock
-  }
-
-  async stopSession(): Promise<void> {
-    // Mock stops instantly
-  }
-
-  async getFinalTranscript(activeLessonId?: string): Promise<string> {
-    if (activeLessonId) {
-      const lesson = DEMO_LESSONS.find(l => l.id === activeLessonId);
-      if (lesson && lesson.suggestedQuestions.length > 0) {
-        const idx = MockTranscriptionProvider.lastIndices[activeLessonId] ?? -1;
-        const nextIdx = (idx + 1) % lesson.suggestedQuestions.length;
-        MockTranscriptionProvider.lastIndices[activeLessonId] = nextIdx;
-        return lesson.suggestedQuestions[nextIdx].label;
-      }
-    }
-    const defaults = [
-      "Explain the step shown on my screen.",
-      "How do I solve this problem?",
-      "Can you walk me through this equation?"
-    ];
-    this.genericIndex = (this.genericIndex + 1) % defaults.length;
-    return defaults[this.genericIndex];
-  }
 }
 
 export class WebAudioTranscriptionProvider implements TranscriptionProvider {
@@ -152,15 +116,11 @@ export class WebAudioTranscriptionProvider implements TranscriptionProvider {
     this.mediaRecorder = null;
   }
 
-  async getFinalTranscript(activeLessonId?: string): Promise<string> {
+  async getFinalTranscript(_activeLessonId?: string): Promise<string> {
     const trimmed = this.transcript.trim();
-    if (trimmed) {
-      console.log('Real speech recognition transcript:', trimmed);
-      return trimmed;
-    }
-    // Fall back to deterministic mock transcript matching the current lesson/context
-    const mock = new MockTranscriptionProvider();
-    return mock.getFinalTranscript(activeLessonId);
+    if (trimmed) console.log('Speech recognition transcript:', trimmed);
+    else console.warn('Speech recognition heard nothing.');
+    return trimmed;
   }
 }
 
@@ -334,11 +294,9 @@ export class CartesiaTranscriptionProvider implements TranscriptionProvider {
       return this.fallback.getFinalTranscript(activeLessonId);
     }
     const trimmed = this.transcript.trim();
-    if (trimmed) {
-      console.log('Cartesia transcript:', trimmed);
-      return trimmed;
-    }
-    return new MockTranscriptionProvider().getFinalTranscript(activeLessonId);
+    if (trimmed) console.log('Cartesia transcript:', trimmed);
+    else console.warn('Cartesia STT heard nothing.');
+    return trimmed;
   }
 }
 

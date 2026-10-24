@@ -103,7 +103,7 @@ describe('onboarding app wiring', () => {
   it('exposes onOpenGettingStarted through preload', () => {
     const preload = readFileSync(join(DESKTOP_ROOT, 'src/preload/index.ts'), 'utf8');
     expect(preload).toContain('onOpenGettingStarted');
-    expect(preload).toContain("ipcRenderer.on('onOpenGettingStarted'");
+    expect(preload).toContain("subscribe('onOpenGettingStarted'");
   });
 
   it('welcome copy uses Quicky.AI and the three-step guide', () => {
