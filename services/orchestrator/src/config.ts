@@ -1,14 +1,32 @@
 import dotenv from 'dotenv';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: resolve(__dirname, '../../../.env') });
+/**
+ * Load development credentials from the monorepo `.env`.
+ * Optional QUICKY_ENV_FILE override for local tooling — never baked into bundles.
+ */
+const envCandidates = [
+  process.env.QUICKY_ENV_FILE,
+  resolve(__dirname, '../../../.env'),
+  resolve(process.cwd(), '.env'),
+].filter((p): p is string => typeof p === 'string' && p.length > 0);
+
+for (const candidate of envCandidates) {
+  if (existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+    break;
+  }
+}
 
 export const config = {
   ORCHESTRATOR_PORT: parseInt(process.env.ORCHESTRATOR_PORT || '4317', 10),
+  /** Loopback by default — do not expose billable AI routes on LAN. */
+  ORCHESTRATOR_HOST: process.env.ORCHESTRATOR_HOST || '127.0.0.1',
   NODE_ENV: process.env.NODE_ENV || 'development',
   
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',

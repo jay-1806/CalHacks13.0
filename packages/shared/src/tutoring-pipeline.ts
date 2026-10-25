@@ -26,20 +26,93 @@ export function canSubmitTutorQuestion(params: {
   return !params.isLoading && !busy && Boolean(params.question.trim());
 }
 
-/** Phase machine used by syncActiveTurn (simplified, pure). */
+/** Inputs mirrored from App → useChatHistory.syncActiveTurn. */
+export type SyncActiveTurnParams = {
+  error: string | null;
+  isScanning: boolean;
+  isLoading?: boolean;
+  isStreaming?: boolean;
+  isResponseReady: boolean;
+  responseDelivered: boolean;
+  hasResponse: boolean;
+};
+
+/**
+ * Phase machine used by syncActiveTurn.
+ *
+ * When capture fails before a tutor request, `failActiveTurn` sets `error` while
+ * the request hook's `error` is still null. A later sync must NOT revive that
+ * terminal failure into `thinking` from idle hook flags.
+ */
 export function nextAiPhase(params: {
   error: string | null;
   isScanning: boolean;
   isResponseReady: boolean;
   responseDelivered: boolean;
   hasResponse: boolean;
+  /** Existing phase on the active turn — required to preserve terminal errors. */
+  currentPhase?: TutorAiPhase;
+  isLoading?: boolean;
+  isStreaming?: boolean;
 }): TutorAiPhase {
   if (params.error) return 'error';
   if (params.isScanning) return 'scanning';
+
+  const hookBusy = Boolean(params.isLoading || params.isStreaming);
+  // Capture/local failure already marked the turn terminal; idle hook state must not revive it.
+  if (
+    params.currentPhase === 'error' &&
+    !hookBusy &&
+    !params.isResponseReady
+  ) {
+    return 'error';
+  }
+
   if (!params.isResponseReady) return 'thinking';
   if (!params.responseDelivered) return 'outputting';
   if (params.hasResponse) return 'done';
   return 'thinking';
+}
+
+/**
+ * Pure sync matching `useChatHistory.syncActiveTurn` phase/error updates.
+ * Explanation attachment stays in the React hook (needs TutorResponse).
+ */
+export function applySyncActiveTurn<T extends PipelineTurn>(
+  turns: T[],
+  activeId: string | null,
+  params: SyncActiveTurnParams
+): T[] {
+  if (!activeId) return turns;
+  return turns.map((turn) => {
+    if (turn.id !== activeId) return turn;
+
+    const phase = nextAiPhase({
+      error: params.error,
+      isScanning: params.isScanning,
+      isResponseReady: params.isResponseReady,
+      responseDelivered: params.responseDelivered,
+      hasResponse: params.hasResponse,
+      currentPhase: turn.aiPhase,
+      isLoading: params.isLoading,
+      isStreaming: params.isStreaming,
+    });
+
+    if (phase === 'error') {
+      return {
+        ...turn,
+        aiPhase: 'error' as const,
+        error: params.error ?? turn.error,
+      };
+    }
+
+    const next = { ...turn, aiPhase: phase };
+    if (turn.error != null) {
+      // Left the terminal error phase on this turn; drop stale failure text.
+      delete (next as { error?: string }).error;
+    }
+    return next;
+  });
 }
 
 /**

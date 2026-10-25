@@ -9,10 +9,13 @@ import {
   buildNarrationSteps,
   figureCenter,
   placeBesideFigure,
+  relocateWorkShapes,
+  syncPointerToRelocatedWork,
   type CaptureRegion,
   type CanvasDrawShape,
   type StreamEvent,
   type NarrationStep,
+  type NormRect,
 } from '@screentutor/shared';
 import type { OverlayExplanationPayload } from '../types/explanation';
 import {
@@ -121,6 +124,10 @@ export default function AnnotationOverlay() {
   const captureRegionRef = useRef<CaptureRegion | null>(null);
   /** Middle of the figure being explained (screen-normalized), so marks sit around it */
   const figureCenterRef = useRef<{ x: number; y: number } | null>(null);
+  /** Scroll offset for the cumulative work-board rail (normalized). */
+  const workRailScrollRef = useRef(0);
+  /** Hit target for wheel-scrolling the explanation rail when content overflows. */
+  const workRailHitRef = useRef<NormRect | null>(null);
   const [isRegionSelecting, setIsRegionSelecting] = useState(false);
   const firedEventCountRef = useRef(0);
 
@@ -199,6 +206,64 @@ export default function AnnotationOverlay() {
   };
 
   /**
+   * Restack every cumulative work board into a non-overlapping rail beside the
+   * figure. Call after applying draw events so streamed/replayed boards never share
+   * the same model coordinates.
+   */
+  const relayoutWorkBoards = (
+    activeWorkIndex?: number,
+    options?: { autoScrollActive?: boolean; scrollY?: number }
+  ) => {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (shapesRef.current.every((s) => s.shape.kind !== 'work')) {
+      workRailHitRef.current = null;
+      workRailScrollRef.current = 0;
+      return;
+    }
+    const beforeWorks = shapesRef.current
+      .filter((s) => s.shape.kind === 'work')
+      .map((s) => ({ x: s.shape.coords[0], y: s.shape.coords[1] }));
+    const prevActive = beforeWorks[activeWorkIndex ?? beforeWorks.length - 1] ?? null;
+    const pointerBefore = lastPointNormRef.current;
+    const scrollY = options?.scrollY ?? workRailScrollRef.current;
+    const points = pointerBefore ? [pointerBefore] : [];
+    const { shapes: next, layout } = relocateWorkShapes(
+      shapesRef.current.map((s) => s.shape),
+      W,
+      H,
+      {
+        scrollY,
+        activeWorkIndex,
+        autoScrollActive: options?.autoScrollActive,
+        points,
+      }
+    );
+    workRailScrollRef.current = layout.scrollY;
+    // Only capture wheel over a rail that is actually safe for the question.
+    workRailHitRef.current = layout.scrollable && layout.safe ? layout.hitRect : null;
+    shapesRef.current = shapesRef.current.map((s, i) => ({
+      ...s,
+      shape: next[i] ?? s.shape,
+    }));
+    const afterWorks = shapesRef.current
+      .filter((s) => s.shape.kind === 'work')
+      .map((s) => ({ x: s.shape.coords[0], y: s.shape.coords[1] }));
+    const nextActive = afterWorks[activeWorkIndex ?? afterWorks.length - 1] ?? null;
+    const synced = syncPointerToRelocatedWork({
+      pointer: pointerBefore,
+      previousWork: prevActive,
+      nextWork: nextActive,
+    });
+    if (synced) {
+      lastPointNormRef.current = { x: synced.x, y: synced.y };
+      lastPointLabelRef.current = synced.label;
+      pointerPosRef.current = { x: synced.x * W, y: synced.y * H };
+      pointerLabelRef.current = synced.label;
+    }
+  };
+
+  /**
    * `replay` re-applies an earlier narration step: its shapes appear instantly
    * (working lines at full strength, diagram marks faded) and the pointer stays put.
    */
@@ -228,6 +293,11 @@ export default function AnnotationOverlay() {
         createdAt: replay ? 0 : performance.now(),
         faded: replay && !STAYS_FULL.has(anchored.kind),
       });
+      // Live (non-replay) work boards: restack immediately so streaming never overlaps.
+      if (!replay && anchored.kind === 'work') {
+        const workCount = shapesRef.current.filter((s) => s.shape.kind === 'work').length;
+        relayoutWorkBoards(Math.max(0, workCount - 1));
+      }
     }
   };
 
@@ -268,6 +338,7 @@ export default function AnnotationOverlay() {
 
   const applyNarrationStep = (stepIndex: number, steps: NarrationStep[]) => {
     shapesRef.current = [];
+    workRailScrollRef.current = 0;
     // Rebuild what earlier steps left on screen so the explanation accumulates.
     for (let i = 0; i < stepIndex; i++) {
       lastPointNormRef.current = null;
@@ -285,6 +356,9 @@ export default function AnnotationOverlay() {
     for (const event of steps[stepIndex].events) {
       applyStreamEvent(event);
     }
+    // One authoritative stack for all cumulative work boards (active = latest).
+    const workCount = shapesRef.current.filter((s) => s.shape.kind === 'work').length;
+    relayoutWorkBoards(Math.max(0, workCount - 1));
     narrationRef.current.stepIndex = stepIndex;
   };
 
@@ -293,13 +367,26 @@ export default function AnnotationOverlay() {
    * hold still while the learner acts — the screen is being watched for their
    * change, so nothing here may move — with a small "your turn" hint.
    */
-  const finishNarration = (awaiting?: string) => {
+  const finishNarration = (awaiting?: string, preserve = false) => {
     const steps = narrationRef.current.steps;
-    if (steps.length === 0) return;
+    // Stop pointer motion immediately; keep completed boards on Esc (preserve).
+    pointerQueueRef.current = [];
+    moveRef.current = null;
+    arrivalBurstRef.current = null;
+
+    if (steps.length === 0) {
+      stopNarration();
+      return;
+    }
     stopNarration();
 
     setDisplayedText(steps.map((step) => step.display).filter(Boolean).join('\n'));
     applyNarrationStep(steps.length - 1, steps);
+    if (preserve) {
+      cancelErase();
+      waitingSinceRef.current = null;
+      return;
+    }
     if (awaiting) {
       waitingSinceRef.current = performance.now();
       setTurnHint(awaiting);
@@ -581,8 +668,8 @@ export default function AnnotationOverlay() {
       setPoint((prev) => (prev ? { ...prev, text } : prev));
     }));
 
-    offs.push(window.electronAPI.onOverlayNarrationFinish(({ awaiting }) => {
-      finishNarration(awaiting);
+    offs.push(window.electronAPI.onOverlayNarrationFinish(({ awaiting, preserve }) => {
+      finishNarration(awaiting, Boolean(preserve));
     }));
 
     offs.push(window.electronAPI.onRegionSelectStart(() => {
@@ -638,7 +725,51 @@ export default function AnnotationOverlay() {
       return;
     }
     // Pointer, marks and working are display-only: clicks go through to the page.
+    // When the explanation rail overflows, temporarily capture input only while the
+    // cursor is over the rail so the user can scroll earlier steps.
     window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (isRegionSelecting) return;
+      const hit = workRailHitRef.current;
+      if (!hit) {
+        window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+        return;
+      }
+      const nx = e.clientX / Math.max(1, window.innerWidth);
+      const ny = e.clientY / Math.max(1, window.innerHeight);
+      const inside =
+        nx >= hit.x && nx <= hit.x + hit.w && ny >= hit.y && ny <= hit.y + hit.h;
+      if (inside) {
+        window.electronAPI.setIgnoreMouseEvents(false);
+      } else {
+        window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      const hit = workRailHitRef.current;
+      if (!hit) return;
+      const nx = e.clientX / Math.max(1, window.innerWidth);
+      const ny = e.clientY / Math.max(1, window.innerHeight);
+      const inside =
+        nx >= hit.x && nx <= hit.x + hit.w && ny >= hit.y && ny <= hit.y + hit.h;
+      if (!inside) return;
+      e.preventDefault();
+      const delta = e.deltaY / Math.max(1, window.innerHeight);
+      const workCount = shapesRef.current.filter((s) => s.shape.kind === 'work').length;
+      relayoutWorkBoards(Math.max(0, workCount - 1), {
+        autoScrollActive: false,
+        scrollY: Math.max(0, workRailScrollRef.current + delta),
+      });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('wheel', onWheel);
+    };
   }, [isRegionSelecting]);
 
   useEffect(() => {

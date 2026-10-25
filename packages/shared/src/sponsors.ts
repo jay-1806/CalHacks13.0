@@ -10,11 +10,20 @@ export const SponsorName = z.enum([
 ]);
 export type SponsorName = z.infer<typeof SponsorName>;
 
+/**
+ * Dashboard status (Part 6.7):
+ * - real: credentials present AND external connectivity/function verified
+ * - configured: credentials present but not yet externally verified
+ * - mock: local/in-process fallback
+ * - disabled: intentionally off
+ * - error: credentials present but connection/init failed
+ */
 export const SponsorStatus = z.enum([
   'real',
+  'configured',
   'mock',
   'disabled',
-  'error'
+  'error',
 ]);
 export type SponsorStatus = z.infer<typeof SponsorStatus>;
 

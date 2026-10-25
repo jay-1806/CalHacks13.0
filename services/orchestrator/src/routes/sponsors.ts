@@ -6,7 +6,13 @@ export const sponsorRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/api/sponsors/status', async (request, reply) => {
     try {
       const memory = await fastify.getMemory();
-      const registry = new SponsorRegistry(memory);
+      const observability = await fastify.getObservability();
+      // elasticVerified/sentryVerified stay false until a deliberate diagnostic
+      // round-trip confirms delivery — credentials alone are "configured".
+      const registry = new SponsorRegistry(memory, observability, {
+        elasticVerified: false,
+        sentryVerified: false,
+      });
       const statuses = await registry.getStatus();
       return RedactionService.redactMetadata(statuses);
     } catch (err: any) {

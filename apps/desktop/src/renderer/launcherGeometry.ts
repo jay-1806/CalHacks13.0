@@ -107,6 +107,155 @@ export function boundsPreservingCenter(
   return { ...origin, width: nextWidth, height: nextHeight };
 }
 
+/**
+ * Resize the buddy window while keeping the launcher disc at a fixed screen
+ * point. Centering-then-clamping (setMainSizeAtAnchor) moves the visible disc
+ * near display edges; this returns an asymmetric offset like the arc menu.
+ */
+export function computeAnchorPreservingWindow(opts: {
+  anchor: { cx: number; cy: number } | { x: number; y: number };
+  workArea: WorkArea;
+  width: number;
+  height: number;
+}): {
+  window: { x: number; y: number; width: number; height: number };
+  launcherOffset: { x: number; y: number };
+  /** Screen-space launcher center after placement (equals the requested anchor). */
+  screenCenter: { x: number; y: number };
+} {
+  const ax = 'cx' in opts.anchor ? opts.anchor.cx : opts.anchor.x;
+  const ay = 'cy' in opts.anchor ? opts.anchor.cy : opts.anchor.y;
+  const width = Math.max(1, Math.round(opts.width));
+  const height = Math.max(1, Math.round(opts.height));
+  const idealX = ax - width / 2;
+  const idealY = ay - height / 2;
+  const origin = clampWindowOrigin(idealX, idealY, width, height, opts.workArea);
+  const launcherOffset = { x: ax - origin.x, y: ay - origin.y };
+  return {
+    window: { x: origin.x, y: origin.y, width, height },
+    launcherOffset,
+    screenCenter: { x: ax, y: ay },
+  };
+}
+
+/** Screen-space center of the launcher disc given window origin + stage offset. */
+export function launcherScreenCenter(
+  windowOrigin: { x: number; y: number },
+  launcherOffset: { x: number; y: number }
+): { x: number; y: number } {
+  return {
+    x: windowOrigin.x + launcherOffset.x,
+    y: windowOrigin.y + launcherOffset.y,
+  };
+}
+
+/** Matches `.quicke-canvas-sheet` defaults (min-width + two action rows). */
+export const CANVAS_SHEET_DEFAULT_SIZE = { width: 188, height: 112 } as const;
+/** CSS `bottom: 48px` — gap from launcher center to sheet bottom edge. */
+export const CANVAS_SHEET_GAP = 48;
+export const CANVAS_SHEET_MARGIN = 12;
+
+export type CanvasSheetPlacement = {
+  /** Sheet left edge relative to the launcher stage origin (no translateX). */
+  left: number;
+  /** Prefer above the launcher (CSS bottom). */
+  bottom: number | null;
+  /** Used when the sheet cannot fit above (CSS top). */
+  top: number | null;
+  /** True when the sheet was shifted or flipped to stay on-screen. */
+  adjusted: boolean;
+  fits: boolean;
+};
+
+/**
+ * Keep the Canvas controls sheet fully inside the buddy window without changing
+ * its size or the launcher screen anchor. Near right/top edges the default
+ * centered-above placement would clip past the BrowserWindow (and thus the
+ * display). Shift inward by the smallest amount that restores a margin.
+ */
+/** Compact Voice listening pill (mic + label + waveform). Fixed size — waveform must not grow it. */
+export const VOICE_LISTEN_PILL_SIZE = { width: 168, height: 40 } as const;
+/** Clear the ~54px launcher disc (half ≈ 27) plus a small visual gap. */
+export const VOICE_LISTEN_GAP = 36;
+export const VOICE_LISTEN_MARGIN = 10;
+
+/**
+ * Place the Listening pill beside the launcher without covering the disc.
+ * Prefer above; flip below / shift horizontally near edges. Same fit rules as Canvas sheet.
+ */
+export function computeVoiceListenPlacement(opts: {
+  launcherOffset: { x: number; y: number };
+  windowSize: { width: number; height: number };
+  pillSize?: { width: number; height: number };
+  gap?: number;
+  margin?: number;
+}): CanvasSheetPlacement {
+  return computeCanvasSheetPlacement({
+    launcherOffset: opts.launcherOffset,
+    windowSize: opts.windowSize,
+    sheetSize: opts.pillSize ?? VOICE_LISTEN_PILL_SIZE,
+    gap: opts.gap ?? VOICE_LISTEN_GAP,
+    margin: opts.margin ?? VOICE_LISTEN_MARGIN,
+  });
+}
+
+export function computeCanvasSheetPlacement(opts: {
+  launcherOffset: { x: number; y: number };
+  windowSize: { width: number; height: number };
+  sheetSize?: { width: number; height: number };
+  gap?: number;
+  margin?: number;
+}): CanvasSheetPlacement {
+  const sheet = opts.sheetSize ?? CANVAS_SHEET_DEFAULT_SIZE;
+  const gap = opts.gap ?? CANVAS_SHEET_GAP;
+  const margin = opts.margin ?? CANVAS_SHEET_MARGIN;
+  const { x: lx, y: ly } = opts.launcherOffset;
+  const winW = opts.windowSize.width;
+  const winH = opts.windowSize.height;
+
+  const desiredLeft = -sheet.width / 2;
+  const minLeft = margin - lx;
+  const maxLeft = winW - margin - sheet.width - lx;
+  const left =
+    minLeft <= maxLeft ? Math.min(Math.max(desiredLeft, minLeft), maxLeft) : (minLeft + maxLeft) / 2;
+
+  // Prefer above the launcher (CSS bottom = gap).
+  const maxBottom = ly - margin - sheet.height;
+  const minBottom = Math.max(0, ly - (winH - margin));
+  let bottom: number | null = gap;
+  let top: number | null = null;
+  let adjusted = Math.abs(left - desiredLeft) > 0.5;
+
+  if (maxBottom >= minBottom && gap <= maxBottom && gap >= minBottom) {
+    bottom = gap;
+  } else if (maxBottom >= minBottom) {
+    bottom = Math.min(Math.max(gap, minBottom), maxBottom);
+    adjusted = true;
+  } else {
+    // Not enough room above — flip below the launcher (CSS top).
+    bottom = null;
+    const desiredTop = gap;
+    const minTop = margin - ly;
+    const maxTop = winH - margin - sheet.height - ly;
+    top =
+      minTop <= maxTop
+        ? Math.min(Math.max(desiredTop, minTop), maxTop)
+        : (minTop + maxTop) / 2;
+    adjusted = true;
+  }
+
+  const sheetLeft = lx + left;
+  const sheetTop =
+    bottom != null ? ly - bottom - sheet.height : ly + (top ?? 0);
+  const fits =
+    sheetLeft >= margin - 0.5 &&
+    sheetLeft + sheet.width <= winW - margin + 0.5 &&
+    sheetTop >= margin - 0.5 &&
+    sheetTop + sheet.height <= winH - margin + 0.5;
+
+  return { left, bottom, top, adjusted, fits };
+}
+
 export function edgeHintsForCenter(
   cx: number,
   cy: number,

@@ -26,6 +26,8 @@ declare global {
     onHoldDictationStart: (callback: () => void) => () => void;
     /** Returns a function that removes the listener. */
     onHoldDictationEnd: (callback: () => void) => () => void;
+    onActionHotkey: (callback: (action: 'voice' | 'capture' | 'text' | 'stop') => void) => () => void;
+    setEscapeActivityActive: (active: boolean) => Promise<{ escapeAvailable: boolean }>;
     onDictationGlow: (callback: (data: { active: boolean }) => void) => () => void;
     setDictationGlow: (active: boolean) => void;
     onOverlayDrawings: (callback: (drawings: any[]) => void) => () => void;
@@ -75,7 +77,7 @@ declare global {
       overlayText: string;
       captureRegion?: { x: number; y: number; width: number; height: number } | null;
     }) => void;
-    finishOverlayNarration: (payload?: { awaiting?: string }) => void;
+    finishOverlayNarration: (payload?: { awaiting?: string; preserve?: boolean }) => void;
     watchScreenChange: () => Promise<'changed' | 'cancelled'>;
     stopWatchingScreen: () => void;
     appendOverlayNarrationStep: (step: { spoken: string; overlay: string }) => void;
@@ -89,7 +91,7 @@ declare global {
       overlayText: string;
       captureRegion?: { x: number; y: number; width: number; height: number } | null;
     }) => void) => () => void;
-    onOverlayNarrationFinish: (callback: (payload: { awaiting?: string }) => void) => () => void;
+    onOverlayNarrationFinish: (callback: (payload: { awaiting?: string; preserve?: boolean }) => void) => () => void;
     flyToPoint: (x: number, y: number, screenNumber?: number, text?: string) => void;
     getSentryConfig: () => Promise<{ enabled: boolean; dsn: string }>;
     simulateOverlayError: () => void;

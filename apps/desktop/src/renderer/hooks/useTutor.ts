@@ -23,6 +23,19 @@ export function useTutor(options: UseTutorOptions = {}) {
   const [isResponseReady, setIsResponseReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [privacyBlockedReason, setPrivacyBlockedReason] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const askGenerationRef = useRef(0);
+
+  /** Abort in-flight tutor SSE and ignore late chunks (Escape / Stop Teaching). */
+  const cancelAsk = useCallback((message = 'Stopped.') => {
+    askGenerationRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    ttsProvider.stop();
+    setIsLoading(false);
+    setIsStreaming(false);
+    setError(message);
+  }, []);
 
   const askQuestion = useCallback(async (
     question: string,
@@ -33,6 +46,11 @@ export function useTutor(options: UseTutorOptions = {}) {
     /** A guided lesson in progress (the learner just acted, or asked mid-lesson) */
     guide?: TutorInput['guide'],
   ) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const generation = ++askGenerationRef.current;
+
     setIsLoading(true);
     setIsStreaming(true);
     setIsResponseReady(false);
@@ -84,8 +102,11 @@ export function useTutor(options: UseTutorOptions = {}) {
       const fetchResponse = await fetch(`${API_BASE}/api/tutor/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input)
+        body: JSON.stringify(input),
+        signal: controller.signal,
       });
+
+      if (generation !== askGenerationRef.current) return null;
 
       if (!fetchResponse.ok) {
         throw new Error(`API error: ${fetchResponse.statusText}`);
@@ -113,6 +134,10 @@ export function useTutor(options: UseTutorOptions = {}) {
       try {
         if (reader) {
           while (true) {
+            if (generation !== askGenerationRef.current || controller.signal.aborted) {
+              await reader.cancel().catch(() => {});
+              break;
+            }
             const { value, done } = await reader.read();
             if (done) break;
 
@@ -121,6 +146,7 @@ export function useTutor(options: UseTutorOptions = {}) {
             buffer = lines.pop() || '';
 
             for (const line of lines) {
+              if (generation !== askGenerationRef.current) break;
               const trimmed = line.trim();
               if (!trimmed) continue;
               if (trimmed.startsWith('data: ')) {
@@ -179,14 +205,21 @@ export function useTutor(options: UseTutorOptions = {}) {
       }
 
       performanceTracker.endSpan('point_parse_to_overlay');
+      if (generation !== askGenerationRef.current) return null;
       return res;
     } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        return null;
+      }
       Sentry.captureException(err);
       setError(err.message || 'An error occurred while talking to the orchestrator.');
       return null;
     } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
+      if (abortRef.current === controller) abortRef.current = null;
+      if (generation === askGenerationRef.current) {
+        setIsLoading(false);
+        setIsStreaming(false);
+      }
     }
   }, []);
 
@@ -198,5 +231,15 @@ export function useTutor(options: UseTutorOptions = {}) {
     window.electronAPI.clearOverlay();
   }, []);
 
-  return { response, isLoading, isStreaming, isResponseReady, error, privacyBlockedReason, askQuestion, clearResponse };
+  return {
+    response,
+    isLoading,
+    isStreaming,
+    isResponseReady,
+    error,
+    privacyBlockedReason,
+    askQuestion,
+    cancelAsk,
+    clearResponse,
+  };
 }

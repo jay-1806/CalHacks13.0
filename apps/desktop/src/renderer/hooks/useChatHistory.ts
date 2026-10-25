@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { TutorResponse } from '@screentutor/shared';
+import { applySyncActiveTurn, type TutorResponse } from '@screentutor/shared';
 
 import type { StoredExplanation } from '../types/explanation';
 
@@ -87,36 +87,31 @@ export function useChatHistory() {
     const id = activeTurnIdRef.current;
     if (!id) return;
 
-    setTurns(prev => prev.map(turn => {
-      if (turn.id !== id) return turn;
+    setTurns((prev) => {
+      const synced = applySyncActiveTurn(prev, id, {
+        error: params.error,
+        isScanning: params.isScanning,
+        isLoading: params.isLoading,
+        isStreaming: params.isStreaming,
+        isResponseReady: params.isResponseReady,
+        responseDelivered: params.responseDelivered,
+        hasResponse: Boolean(params.response),
+      });
 
-      if (params.error) {
-        return { ...turn, aiPhase: 'error' as const, error: params.error };
+      // Attach explanation/reference only when this sync reaches done with a response.
+      if (!params.response || !params.isResponseReady || !params.responseDelivered) {
+        return synced;
       }
 
-      if (params.isScanning) {
-        return { ...turn, aiPhase: 'scanning' as const };
-      }
-
-      if (!params.isResponseReady) {
-        return { ...turn, aiPhase: 'thinking' as const };
-      }
-
-      if (!params.responseDelivered) {
-        return { ...turn, aiPhase: 'outputting' as const };
-      }
-
-      if (params.response) {
+      return synced.map((turn) => {
+        if (turn.id !== id || turn.aiPhase !== 'done') return turn;
         return {
           ...turn,
-          aiPhase: 'done' as const,
-          reference: getTurnReference(params.response),
-          explanation: buildExplanation(params.response) ?? turn.explanation,
+          reference: getTurnReference(params.response!),
+          explanation: buildExplanation(params.response!) ?? turn.explanation,
         };
-      }
-
-      return turn;
-    }));
+      });
+    });
   }, []);
 
   const updateTurnExplanation = useCallback((turnId: string, patch: Partial<StoredExplanation>) => {

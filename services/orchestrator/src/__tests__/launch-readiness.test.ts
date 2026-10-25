@@ -88,6 +88,7 @@ describe('desktop wiring — startup mic + voice path', () => {
   it('does not call ensureMicrophone / askForMediaAccess during app.whenReady', () => {
     const main = readFileSync(join(DESKTOP, 'src/main/index.ts'), 'utf8');
     const readyBlock = main.slice(main.indexOf('app.whenReady()'), main.indexOf("app.on('will-quit'"));
+    // Non-prompting status only at startup — never ensureMicrophone.
     expect(readyBlock).toContain('getPermissionStatus()');
     expect(readyBlock).not.toMatch(/ensureMicrophone\s*\(/);
     expect(readyBlock).not.toMatch(/askForMediaAccess\s*\(/);
@@ -143,8 +144,12 @@ describe('desktop wiring — startup mic + voice path', () => {
     expect(app).toContain('failActiveTurn');
   });
 
-  it('Help getting started is gated while tutoring is busy', () => {
+  it('Help getting started opens embedded onboarding via onOpenGettingStarted', () => {
+    const main = readFileSync(join(DESKTOP, 'src/main/index.ts'), 'utf8');
+    expect(main).toContain("send('onOpenGettingStarted')");
+    expect(main).not.toContain('createOrFocusWelcomeWindow');
     const app = readFileSync(join(DESKTOP, 'src/renderer/App.tsx'), 'utf8');
-    expect(app).toContain('canOpenGettingStartedFromHelp');
+    expect(app).toContain('onOpenGettingStarted');
+    expect(app).toContain('WelcomeOnboarding');
   });
 });

@@ -8,6 +8,7 @@ import {
 patchConsole();
 
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen } from 'electron';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import {
@@ -23,6 +24,12 @@ import {
 import { stopWatchingScreen, watchForScreenChange } from './screen-watch.js';
 import { isWindowDenied, togglePrivacyMode, getPrivacyMode, getActiveWindowTitle } from './privacy.js';
 import { registerHoldDictationShortcuts, unregisterHoldDictationShortcuts } from './shortcuts.js';
+import {
+  registerActionShortcuts,
+  unregisterActionShortcuts,
+  setEscapeActivityActive,
+} from './action-shortcuts.js';
+import type { QuickyHotkeyAction } from '@screentutor/shared';
 import { isMac } from './platform.js';
 import { ensureMicrophone, getPermissionStatus, openPermissionSettings, type PermissionKind } from './permissions.js';
 import * as Sentry from '@sentry/node';
@@ -35,9 +42,18 @@ initSentry();
  * Official display name is Quicky.AI. Lock userData to the existing
  * `@screentutor/desktop` directory BEFORE setName so preferences / session
  * storage are not orphaned by the rebrand.
+ *
+ * Test / private-demo override: QUICKY_USER_DATA_DIR or --user-data-dir=…
+ * (never used for normal installs).
  */
-const preservedUserData = join(app.getPath('appData'), PRODUCT_USER_DATA_DIR);
-app.setPath('userData', preservedUserData);
+function resolveUserDataPath(): string {
+  const envOverride = process.env.QUICKY_USER_DATA_DIR?.trim();
+  if (envOverride) return envOverride;
+  const arg = process.argv.find((a) => a.startsWith('--user-data-dir='));
+  if (arg) return arg.slice('--user-data-dir='.length);
+  return join(app.getPath('appData'), PRODUCT_USER_DATA_DIR);
+}
+app.setPath('userData', resolveUserDataPath());
 app.setName(PRODUCT_DISPLAY_NAME);
 
 /**
@@ -50,7 +66,13 @@ if (!gotSingleInstanceLock) {
 }
 
 function resolveAppIconPath(): string {
-  // electron-vite main → out/main; build resources live at apps/desktop/build
+  // Packaged: prefer Resources/icon.png; fall back to .icns companion PNG if present.
+  // Dev (electron-vite): apps/desktop/build relative to out/main.
+  if (app.isPackaged) {
+    const png = join(process.resourcesPath, 'icon.png');
+    if (existsSync(png)) return png;
+    return join(process.resourcesPath, 'icon.icns');
+  }
   return join(__dirname, '../../build/icon.png');
 }
 
@@ -70,6 +92,7 @@ function applyNativeAppIcon() {
 let mainWindow: BrowserWindow;
 let overlayWindow: BrowserWindow;
 let regionSelectActive = false;
+let isQuitting = false;
 
 function setOverlayInteractive(interactive: boolean) {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
@@ -259,7 +282,8 @@ function setDictationGlow(active: boolean) {
 
 function notifyHoldDictationStart() {
   console.log('[Main] Hold dictation started');
-  setDictationGlow(true);
+  // Do not enable the full-screen DictationGlow Listening pill — the buddy
+  // FloatingLauncher owns the single compact listening indicator (Part 6.6.1).
   if (mainWindow && !mainWindow.isDestroyed()) {
     raiseMainWindow(false);
     mainWindow.webContents.send('onHoldDictationStart');
@@ -271,6 +295,13 @@ function notifyHoldDictationEnd() {
   setDictationGlow(false);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('onHoldDictationEnd');
+  }
+}
+
+function notifyActionHotkey(action: QuickyHotkeyAction) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    raiseMainWindow(false);
+    mainWindow.webContents.send('onActionHotkey', action);
   }
 }
 
@@ -309,6 +340,13 @@ function createWindow() {
       setMainSizeAtAnchor(COLLAPSED_SIZE, COLLAPSED_SIZE);
       mainWindow.showInactive();
       raiseMainWindow();
+    });
+
+    mainWindow.on('closed', () => {
+      // Closing the floating launcher ends the app session (Quit path).
+      if (!isQuitting) {
+        app.quit();
+      }
     });
 
     mainWindow.on('blur', () => {
@@ -414,7 +452,20 @@ app.on('second-instance', () => {
 function installApplicationMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [];
   if (isMac) {
-    template.push({ role: 'appMenu' });
+    template.push({
+      role: 'appMenu',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    });
   }
   template.push(
     { role: 'editMenu' },
@@ -446,6 +497,7 @@ app.whenReady().then(() => {
     createOverlay();
 
     void registerHoldDictationShortcuts(notifyHoldDictationStart, notifyHoldDictationEnd);
+    registerActionShortcuts(notifyActionHotkey);
 
     if (isMac) {
       // Non-prompting status check only — never request OS mic access at startup.
@@ -472,8 +524,29 @@ app.whenReady().then(() => {
   }
 });
 
+app.on('activate', () => {
+  if (!gotSingleInstanceLock) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    raiseMainWindow(true);
+    return;
+  }
+  createWindow();
+  createOverlay();
+});
+
+app.on('window-all-closed', () => {
+  if (!isMac) {
+    app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 app.on('will-quit', () => {
   unregisterHoldDictationShortcuts();
+  unregisterActionShortcuts();
 });
 
 // IPC Handlers
@@ -690,7 +763,12 @@ ipcMain.handle('set-main-bounds', (_event, bounds) => {
 /** Dev/diagnostic: buddy + overlay roles (never secrets). */
 ipcMain.handle('get-window-inventory', () => {
   return BrowserWindow.getAllWindows().map((w) => {
-    const role = w === mainWindow ? 'buddy' : w === overlayWindow ? 'overlay' : 'other';
+    const role =
+      w === mainWindow
+        ? 'buddy'
+        : w === overlayWindow
+          ? 'overlay'
+              : 'other';
     return {
       id: w.id,
       role,
@@ -750,7 +828,7 @@ ipcMain.handle('watch-screen-change', () =>
 
 ipcMain.on('stop-watching-screen', () => stopWatchingScreen());
 
-ipcMain.on('finish-overlay-narration', (_event, payload?: { awaiting?: string }) => {
+ipcMain.on('finish-overlay-narration', (_event, payload?: { awaiting?: string; preserve?: boolean }) => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.webContents.send('onOverlayNarrationFinish', payload ?? {});
   }
@@ -811,6 +889,10 @@ ipcMain.handle('get-permission-status', () => getPermissionStatus());
 
 /** Voice-path only: may prompt once when microphone status is not-determined. */
 ipcMain.handle('ensure-microphone', async () => ensureMicrophone());
+
+ipcMain.handle('set-escape-activity-active', (_event, active: boolean) => {
+  return setEscapeActivityActive(Boolean(active));
+});
 
 ipcMain.on('open-permission-settings', (_event, kind: PermissionKind) => {
   if (kind === 'screen' || kind === 'microphone') openPermissionSettings(kind);

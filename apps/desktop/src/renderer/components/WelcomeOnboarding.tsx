@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
-import { PRODUCT_DISPLAY_NAME } from '@screentutor/shared';
+import { DEMO_VOICE_MODE, PRODUCT_DISPLAY_NAME } from '@screentutor/shared';
 import TutorCursorIcon from './TutorCursorIcon';
 import './WelcomeOnboarding.css';
 
@@ -10,53 +10,54 @@ interface Props {
   openedFromHelp?: boolean;
 }
 
-function ClickGuideIcon() {
+function SeeIcon() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 9V5.5a1.5 1.5 0 0 1 3 0V11" />
-      <path d="M13 11V9.5a1.5 1.5 0 0 1 3 0V12" />
-      <path d="M16 12v-1a1.5 1.5 0 0 1 3 0v3.5a5 5 0 0 1-5 5h-1.2a5 5 0 0 1-3.6-1.5L7 14.5" />
-      <path d="M7 14.5V8.8a1.3 1.3 0 0 1 2.6 0V11" />
+      <rect x="3.5" y="5" width="17" height="12.5" rx="2" />
+      <path d="M8 20h8" />
+      <path d="M12 17.5V20" />
+      <circle cx="12" cy="11" r="2.2" />
+      <path d="M7.5 11a5.2 5.2 0 0 1 9 0" />
     </svg>
   );
 }
 
-function AskGuideIcon() {
+function ExplainIcon() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 8.5A3.5 3.5 0 0 1 8.5 5h7A3.5 3.5 0 0 1 19 8.5v3A3.5 3.5 0 0 1 15.5 15H12l-3.2 2.4V15H8.5A3.5 3.5 0 0 1 5 11.5v-3z" />
-      <path d="M9 9.2h6M9 12h3.5" />
+      <path d="M12 4.5a6.5 6.5 0 0 1 4.2 11.4v2.2H7.8v-2.2A6.5 6.5 0 0 1 12 4.5z" />
+      <path d="M10 20.5h4" />
+      <path d="M9.5 10.5h5M11 13.5h2" />
     </svg>
   );
 }
 
-function TeachGuideIcon() {
+function GuideIcon() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8.5" cy="9" r="2.2" />
-      <path d="M11.5 10.5 16 7.5" />
-      <path d="M16 7.5h2.5v2" />
-      <path d="M6 16.5h12" />
-      <path d="M8 16.5v2M12 16.5v2M16 16.5v2" />
+      <path d="M5 4.5 19 12 11.5 14.2 9 20.5z" />
     </svg>
   );
 }
 
-const STEPS = [
+const CARDS = [
   {
-    title: 'Open the floating menu',
-    subtitle: 'Click the Liquid Metal button.',
-    Icon: ClickGuideIcon,
+    eyebrow: 'SEE',
+    title: "See what's on your screen",
+    subtitle: "Bring Quicky.AI into your workflow and give it context from the problem you're working on.",
+    Icon: SeeIcon,
   },
   {
-    title: 'Choose how to ask',
-    subtitle: 'Text, Voice, or Capture.',
-    Icon: AskGuideIcon,
+    eyebrow: 'EXPLAIN',
+    title: 'Understand the problem',
+    subtitle: "Get clear, step-by-step explanations tailored to what's in front of you.",
+    Icon: ExplainIcon,
   },
   {
-    title: 'Follow the explanation',
-    subtitle: 'See annotations and hear each step.',
-    Icon: TeachGuideIcon,
+    eyebrow: 'GUIDE',
+    title: 'Learn right where you work',
+    subtitle: 'Follow visual explanations, narrated steps, and guided on-screen annotations.',
+    Icon: GuideIcon,
   },
 ] as const;
 
@@ -91,38 +92,52 @@ export default function WelcomeOnboarding({ onGetStarted, onDismiss, openedFromH
     >
       <div className="welcome-onboarding__scroll">
         <header className="welcome-onboarding__brand">
-          <TutorCursorIcon size={36} className="welcome-onboarding__logo" decorative={false} />
+          <TutorCursorIcon size={40} className="welcome-onboarding__logo" decorative={false} />
           <div className="welcome-onboarding__brand-text">
             <p className="welcome-onboarding__product">{PRODUCT_DISPLAY_NAME}</p>
-            <p className="welcome-onboarding__eyebrow">Getting started</p>
+            <p className="welcome-onboarding__eyebrow">Welcome</p>
           </div>
         </header>
 
         <div className="welcome-onboarding__hero">
           <h1 id={titleId} className="welcome-onboarding__title">
-            Learn right on your screen.
+            Meet Quicky.AI
           </h1>
-          <p className="welcome-onboarding__subtitle">Ask. Watch. Understand.</p>
+          <p className="welcome-onboarding__subtitle">
+            Your personal AI tutor, available anywhere on your desktop.
+          </p>
         </div>
 
         <ol className="welcome-onboarding__steps">
-          {STEPS.map(({ title, subtitle, Icon }, index) => (
-            <li key={title} className="welcome-onboarding__step">
+          {CARDS.map(({ eyebrow, title, subtitle, Icon }) => (
+            <li key={eyebrow} className="welcome-onboarding__step">
               <span className="welcome-onboarding__step-icon" aria-hidden="true">
                 <Icon />
               </span>
               <div className="welcome-onboarding__step-copy">
-                <p className="welcome-onboarding__step-title">
-                  <span className="welcome-onboarding__step-index" aria-hidden="true">
-                    {index + 1}.
-                  </span>{' '}
-                  {title}
-                </p>
+                <p className="welcome-onboarding__step-eyebrow">{eyebrow}</p>
+                <p className="welcome-onboarding__step-title">{title}</p>
                 <p className="welcome-onboarding__step-subtitle">{subtitle}</p>
               </div>
             </li>
           ))}
         </ol>
+
+        <section className="welcome-onboarding__perms" aria-label="Permissions">
+          <p className="welcome-onboarding__perms-title">Permissions when you need them</p>
+          <ul className="welcome-onboarding__perms-list">
+            <li>
+              <strong>Screen access</strong> — Used when you ask Quicky.AI to understand something on
+              your screen.
+            </li>
+            <li>
+              <strong>Microphone</strong> —{' '}
+              {DEMO_VOICE_MODE
+                ? 'Live microphone Voice is available in settings paths; the current Voice action can run a guided demo without listening to your mic.'
+                : 'Used only when live microphone Voice mode is enabled and you intentionally start recording.'}
+            </li>
+          </ul>
+        </section>
       </div>
 
       <footer className="welcome-onboarding__footer">
@@ -133,7 +148,7 @@ export default function WelcomeOnboarding({ onGetStarted, onDismiss, openedFromH
             className="welcome-onboarding__btn welcome-onboarding__btn--primary"
             onClick={onGetStarted}
           >
-            Get started
+            Start Learning
           </button>
           <button
             type="button"
@@ -146,7 +161,7 @@ export default function WelcomeOnboarding({ onGetStarted, onDismiss, openedFromH
         <p className="welcome-onboarding__hint">
           {openedFromHelp
             ? 'Press Esc to return to your tutor panel.'
-            : 'Find this guide anytime in Help.'}
+            : 'Your assistant will appear as a floating shortcut.'}
         </p>
       </footer>
     </div>

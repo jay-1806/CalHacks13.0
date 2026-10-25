@@ -79,48 +79,42 @@ describe('onboarding busy gates', () => {
 });
 
 describe('onboarding app wiring', () => {
-  it('keeps welcome inside the buddy panel and wires Help IPC', () => {
+  it('keeps buddy App free of BrowserWindow and preserves reset helper', () => {
     const appSrc = readFileSync(join(DESKTOP_ROOT, 'src/renderer/App.tsx'), 'utf8');
-    expect(appSrc).toContain('WelcomeOnboarding');
-    expect(appSrc).toContain('handleWelcomeGetStarted');
-    expect(appSrc).toContain('setFocusInputToken');
-    expect(appSrc).toContain('onOpenGettingStarted');
     expect(appSrc).toContain('placeTutorPanel');
     expect(appSrc).toContain('__quickyResetOnboarding');
     expect(appSrc).toContain("host === 'localhost'");
     expect(appSrc).not.toContain('new BrowserWindow');
+    expect(appSrc).toContain('WelcomeOnboarding');
+    expect(appSrc).toContain('shouldAutoShowOnboarding');
+    expect(appSrc).toContain('onOpenGettingStarted');
   });
 
-  it('installs Help → Getting Started in the native menu', () => {
+  it('installs Help → Getting Started via onOpenGettingStarted IPC', () => {
     const mainSrc = readFileSync(join(DESKTOP_ROOT, 'src/main/index.ts'), 'utf8');
     expect(mainSrc).toContain('installApplicationMenu');
     expect(mainSrc).toContain("label: 'Getting Started'");
     expect(mainSrc).toContain("label: 'Help'");
     expect(mainSrc).toContain("send('onOpenGettingStarted')");
     expect(mainSrc).toContain('Menu.setApplicationMenu');
+    expect(mainSrc).not.toContain('createOrFocusWelcomeWindow');
   });
 
-  it('exposes onOpenGettingStarted through preload', () => {
+  it('exposes Getting Started IPC through preload', () => {
     const preload = readFileSync(join(DESKTOP_ROOT, 'src/preload/index.ts'), 'utf8');
     expect(preload).toContain('onOpenGettingStarted');
-    expect(preload).toContain("subscribe('onOpenGettingStarted'");
+    expect(preload).not.toContain('welcomeStartLearning');
   });
 
-  it('welcome copy uses Quicky.AI and the three-step guide', () => {
-    const welcome = readFileSync(join(DESKTOP_ROOT, 'src/renderer/components/WelcomeOnboarding.tsx'), 'utf8');
-    expect(welcome).toContain('PRODUCT_DISPLAY_NAME');
-    expect(welcome).toContain('Learn right on your screen.');
-    expect(welcome).toContain('Ask. Watch. Understand.');
-    expect(welcome).toContain('Open the floating menu');
-    expect(welcome).toContain('Choose how to ask');
-    expect(welcome).toContain('Follow the explanation');
-    expect(welcome).toContain('Get started');
-    expect(welcome).toContain('Not now');
-    expect(welcome).not.toMatch(/Quicke\.AI|ScreenTutor/);
-    const welcomeCss = readFileSync(
-      join(DESKTOP_ROOT, 'src/renderer/components/WelcomeOnboarding.css'),
+  it('embedded Welcome onboarding uses Quicky.AI SEE/EXPLAIN/GUIDE', () => {
+    const welcome = readFileSync(
+      join(DESKTOP_ROOT, 'src/renderer/components/WelcomeOnboarding.tsx'),
       'utf8'
     );
-    expect(welcomeCss).toContain('prefers-reduced-motion');
+    expect(welcome).toContain('PRODUCT_DISPLAY_NAME');
+    expect(welcome).toContain('SEE');
+    expect(welcome).toContain('EXPLAIN');
+    expect(welcome).toContain('GUIDE');
+    expect(welcome).not.toMatch(/Quicke\.AI|ScreenTutor/);
   });
 });

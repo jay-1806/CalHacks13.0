@@ -49,6 +49,8 @@ interface Props {
 
   isRecordingVoice: boolean;
   setIsRecordingVoice: (rec: boolean) => void;
+  /** Live speech-to-text draft for the current Voice session (one bubble). */
+  voiceDraft?: string;
   isSpeaking: boolean;
   revealedSpokenText?: string;
   isMuted: boolean;
@@ -87,6 +89,7 @@ export default function ChatPanel({
   askQuestion,
   clearResponse,
   isRecordingVoice,
+  voiceDraft = '',
   isSpeaking,
   revealedSpokenText,
   isMuted,
@@ -332,8 +335,8 @@ export default function ChatPanel({
             type="button"
             className={`icon-btn ${showSponsors ? 'active' : ''}`}
             onClick={handleToggleSponsors}
-            title="Sponsors"
-            aria-label="Sponsor status"
+            title="Core Services"
+            aria-label="Core services status"
             aria-pressed={showSponsors}
           >
             <ShieldIcon />
@@ -393,7 +396,7 @@ export default function ChatPanel({
             )}
 
             <div className="chat-thread" ref={chatThreadRef}>
-              {chatTurns.length === 0 && (
+              {chatTurns.length === 0 && !isRecordingVoice && (
                 <div className="chat-empty-state">
                   <div className="chat-empty-mark" aria-hidden="true">
                     <EmptyMarkIcon />
@@ -450,13 +453,23 @@ export default function ChatPanel({
                   </div>
                 </div>
               ))}
+
+              {isRecordingVoice && (
+                <div className="chat-turn voice-draft-turn" aria-live="polite">
+                  <div className="chat-message chat-message-user">
+                    <div className={`chat-bubble user-bubble voice-draft-bubble${voiceDraft.trim() ? '' : ' is-placeholder'}`}>
+                      {voiceDraft.trim() || 'Speak your question…'}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
 
       {isRecordingVoice ? (
-        <div className="voice-recording-overlay no-drag" role="status" aria-live="polite">
+        <div className="voice-live-bar no-drag" role="status" aria-live="polite">
           <div className="waveform-container" aria-hidden="true">
             <span className="waveform-bar bar1" />
             <span className="waveform-bar bar2" />
@@ -464,9 +477,8 @@ export default function ChatPanel({
             <span className="waveform-bar bar4" />
             <span className="waveform-bar bar5" />
           </div>
-          <span className="voice-recording-text">
-            Listening…
-          </span>
+          <span className="voice-recording-text">Listening…</span>
+          <span className="voice-live-hint">Esc to cancel</span>
         </div>
       ) : (
         !showMemory &&

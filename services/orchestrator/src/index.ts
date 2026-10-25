@@ -1,4 +1,4 @@
-import { patchConsole } from '@screentutor/shared';
+import { isAllowedOrchestratorCorsOrigin, patchConsole } from '@screentutor/shared';
 patchConsole();
 
 import Fastify from 'fastify';
@@ -38,7 +38,7 @@ let aiProviderInstance: AIProvider | null = null;
 async function getAIProvider(): Promise<AIProvider> {
   if (!aiProviderInstance) {
     if (!config.ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is missing! Please provide it in the .env file.");
+      throw new Error('ANTHROPIC_API_KEY is missing! Please provide it in the .env file.');
     }
     const { ClaudeProvider } = await import('./providers/anthropic-provider.js');
     aiProviderInstance = new ClaudeProvider(config.ANTHROPIC_API_KEY);
@@ -83,13 +83,20 @@ let observabilityInstance: ObservabilityService | null = null;
 async function getObservability(): Promise<ObservabilityService> {
   if (!observabilityInstance) {
     const { OtlpObservabilityService, NoopObservabilityService } = await import('./observability/observability-service.js');
-    observabilityInstance = (config.ELASTIC_ENABLED && config.ELASTIC_OTLP_ENDPOINT)
-      ? new OtlpObservabilityService({
-          endpoint: config.ELASTIC_OTLP_ENDPOINT,
-          headers: config.ELASTIC_API_KEY ? { Authorization: `ApiKey ${config.ELASTIC_API_KEY}` } : undefined,
-          environment: config.NODE_ENV,
-        })
-      : new NoopObservabilityService();
+    // Require both OTLP endpoint and API key before exporting (Part 6.7).
+    observabilityInstance =
+      config.ELASTIC_ENABLED && config.ELASTIC_OTLP_ENDPOINT && config.ELASTIC_API_KEY
+        ? new OtlpObservabilityService({
+            endpoint: config.ELASTIC_OTLP_ENDPOINT,
+            headers: { Authorization: `ApiKey ${config.ELASTIC_API_KEY}` },
+            environment: config.NODE_ENV,
+          })
+        : new NoopObservabilityService();
+    if (config.ELASTIC_ENABLED && (!config.ELASTIC_OTLP_ENDPOINT || !config.ELASTIC_API_KEY)) {
+      console.warn(
+        'ELASTIC_OTLP_ENDPOINT / ELASTIC_API_KEY not set — OpenTelemetry export is local no-op only.'
+      );
+    }
   }
   return observabilityInstance;
 }
@@ -136,8 +143,12 @@ fastify.setErrorHandler((error: any, request, reply) => {
   });
 });
 
-// Register plugins
-await fastify.register(cors, { origin: '*' });
+// Register plugins — loopback / file:// renderer only (no open LAN CORS).
+await fastify.register(cors, {
+  origin: (origin, cb) => {
+    cb(null, isAllowedOrchestratorCorsOrigin(origin));
+  },
+});
 
 // Register routes
 await fastify.register(healthRoutes);
@@ -149,8 +160,9 @@ await fastify.register(ttsRoutes);
 // Start server
 const start = async () => {
   try {
-    await fastify.listen({ port: config.ORCHESTRATOR_PORT, host: '0.0.0.0' });
-    console.log(`Server listening at http://localhost:${config.ORCHESTRATOR_PORT}`);
+    const host = config.ORCHESTRATOR_HOST || '127.0.0.1';
+    await fastify.listen({ port: config.ORCHESTRATOR_PORT, host });
+    console.log(`Server listening at http://${host}:${config.ORCHESTRATOR_PORT}`);
     // Build services now so the first question doesn't pay for Convex/Moss setup.
     getOrchestrator().catch((err) => console.warn('Orchestrator warm-up failed:', err.message));
     console.log(`AI Provider: ${config.ANTHROPIC_API_KEY ? 'claude' : 'none'}`);

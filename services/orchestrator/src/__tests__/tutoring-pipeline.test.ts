@@ -2,11 +2,44 @@ import { describe, expect, it } from 'vitest';
 import {
   algebraNarrationFixture,
   applyFailActiveTurn,
+  applySyncActiveTurn,
   canSubmitTutorQuestion,
   nextAiPhase,
   panelOpensNearLauncherNotCorner,
   selectCaptureForQuestion,
+  type PipelineTurn,
 } from '@screentutor/shared';
+
+/** Idle hook flags after capture aborts before askQuestion (useTutor error still null). */
+const IDLE_AFTER_CAPTURE_FAIL = {
+  error: null as string | null,
+  isScanning: false,
+  isLoading: false,
+  isStreaming: false,
+  isResponseReady: false,
+  responseDelivered: false,
+  hasResponse: false,
+};
+
+/**
+ * Pre-fix sync behavior: ignored turn.aiPhase and forced Thinking from idle hooks.
+ * Kept only to document the Part 6.3 regression (must NOT be used in production).
+ */
+function buggySyncAfterCaptureFail(turns: PipelineTurn[], activeId: string): PipelineTurn[] {
+  return turns.map((turn) => {
+    if (turn.id !== activeId) return turn;
+    if (IDLE_AFTER_CAPTURE_FAIL.error) {
+      return { ...turn, aiPhase: 'error' as const, error: IDLE_AFTER_CAPTURE_FAIL.error };
+    }
+    if (IDLE_AFTER_CAPTURE_FAIL.isScanning) {
+      return { ...turn, aiPhase: 'scanning' as const };
+    }
+    if (!IDLE_AFTER_CAPTURE_FAIL.isResponseReady) {
+      return { ...turn, aiPhase: 'thinking' as const };
+    }
+    return turn;
+  });
+}
 
 describe('Part 4.0 — text submission guards', () => {
   it('allows exactly one send when idle with a non-empty question', () => {
@@ -125,6 +158,176 @@ describe('Part 4.0 — capture failure unlocks conversation', () => {
         question: 'try again',
       })
     ).toBe(true);
+  });
+});
+
+describe('Part 6.3 — capture failure must survive syncActiveTurn', () => {
+  const captureMsg = 'Screen capture was blocked or unavailable.';
+
+  it('documents the pre-fix bug: sync after failActiveTurn revived Thinking', () => {
+    const started: PipelineTurn[] = [{ id: 't1', userText: 'Solve 3(x+2)=21', aiPhase: 'scanning' }];
+    const failed = applyFailActiveTurn(started, 't1', captureMsg);
+    const buggy = buggySyncAfterCaptureFail(failed, 't1');
+    expect(buggy[0].aiPhase).toBe('thinking');
+    expect(
+      canSubmitTutorQuestion({ isLoading: false, activePhase: buggy[0].aiPhase, question: 'retry' })
+    ).toBe(false);
+  });
+
+  it('keeps error after failActiveTurn then sync with null hook error (capture denied)', () => {
+    const started: PipelineTurn[] = [{ id: 't1', userText: 'Solve 3(x+2)=21', aiPhase: 'scanning' }];
+    const failed = applyFailActiveTurn(started, 't1', captureMsg);
+    const synced = applySyncActiveTurn(failed, 't1', IDLE_AFTER_CAPTURE_FAIL);
+    expect(synced[0].aiPhase).toBe('error');
+    expect(synced[0].error).toBe(captureMsg);
+    expect(
+      canSubmitTutorQuestion({ isLoading: false, activePhase: synced[0].aiPhase, question: 'retry' })
+    ).toBe(true);
+  });
+
+  it('keeps error stable across repeated idle syncs', () => {
+    let turns: PipelineTurn[] = [{ id: 't1', userText: 'hi', aiPhase: 'scanning' }];
+    turns = applyFailActiveTurn(turns, 't1', captureMsg);
+    turns = applySyncActiveTurn(turns, 't1', IDLE_AFTER_CAPTURE_FAIL);
+    turns = applySyncActiveTurn(turns, 't1', IDLE_AFTER_CAPTURE_FAIL);
+    turns = applySyncActiveTurn(turns, 't1', IDLE_AFTER_CAPTURE_FAIL);
+    expect(turns[0].aiPhase).toBe('error');
+    expect(turns[0].error).toBe(captureMsg);
+  });
+
+  it('lets a new turn enter scanning after a failed turn', () => {
+    const failed = applyFailActiveTurn(
+      [{ id: 't1', userText: 'old', aiPhase: 'scanning' }],
+      't1',
+      captureMsg
+    );
+    const withNew: PipelineTurn[] = [
+      ...applySyncActiveTurn(failed, 't1', IDLE_AFTER_CAPTURE_FAIL),
+      { id: 't2', userText: 'new question', aiPhase: 'scanning' },
+    ];
+    const syncedNew = applySyncActiveTurn(withNew, 't2', {
+      error: null,
+      isScanning: true,
+      isLoading: false,
+      isStreaming: false,
+      isResponseReady: false,
+      responseDelivered: false,
+      hasResponse: false,
+    });
+    expect(syncedNew.find((t) => t.id === 't1')?.aiPhase).toBe('error');
+    expect(syncedNew.find((t) => t.id === 't2')?.aiPhase).toBe('scanning');
+    expect(
+      canSubmitTutorQuestion({
+        isLoading: false,
+        activePhase: 'scanning',
+        question: 'blocked while scanning',
+      })
+    ).toBe(false);
+  });
+
+  it('preserves normal success scanning → thinking → outputting → done', () => {
+    let turns: PipelineTurn[] = [{ id: 't1', userText: '3(x+2)=21', aiPhase: 'scanning' }];
+    turns = applySyncActiveTurn(turns, 't1', {
+      error: null,
+      isScanning: true,
+      isResponseReady: false,
+      responseDelivered: false,
+      hasResponse: false,
+    });
+    expect(turns[0].aiPhase).toBe('scanning');
+    turns = applySyncActiveTurn(turns, 't1', {
+      error: null,
+      isScanning: false,
+      isLoading: true,
+      isStreaming: true,
+      isResponseReady: false,
+      responseDelivered: false,
+      hasResponse: false,
+    });
+    expect(turns[0].aiPhase).toBe('thinking');
+    turns = applySyncActiveTurn(turns, 't1', {
+      error: null,
+      isScanning: false,
+      isLoading: false,
+      isStreaming: false,
+      isResponseReady: true,
+      responseDelivered: false,
+      hasResponse: true,
+    });
+    expect(turns[0].aiPhase).toBe('outputting');
+    turns = applySyncActiveTurn(turns, 't1', {
+      error: null,
+      isScanning: false,
+      isResponseReady: true,
+      responseDelivered: true,
+      hasResponse: true,
+    });
+    expect(turns[0].aiPhase).toBe('done');
+  });
+
+  it('keeps provider error stable when hook error remains set', () => {
+    let turns: PipelineTurn[] = [{ id: 't1', userText: 'q', aiPhase: 'thinking' }];
+    turns = applySyncActiveTurn(turns, 't1', {
+      error: 'API error: Unauthorized',
+      isScanning: false,
+      isLoading: false,
+      isStreaming: false,
+      isResponseReady: false,
+      responseDelivered: false,
+      hasResponse: false,
+    });
+    expect(turns[0].aiPhase).toBe('error');
+    turns = applySyncActiveTurn(turns, 't1', {
+      error: 'API error: Unauthorized',
+      isScanning: false,
+      isResponseReady: false,
+      responseDelivered: false,
+      hasResponse: false,
+    });
+    expect(turns[0].aiPhase).toBe('error');
+    expect(turns[0].error).toMatch(/Unauthorized/);
+  });
+
+  it('voice capture failure uses the same unlock path as text', () => {
+    // Voice path: startTurn → failActiveTurn(capture) → sync idle (no askQuestion).
+    let turns: PipelineTurn[] = [{ id: 'voice-1', userText: 'solve it', aiPhase: 'scanning' }];
+    turns = applyFailActiveTurn(turns, 'voice-1', captureMsg);
+    turns = applySyncActiveTurn(turns, 'voice-1', IDLE_AFTER_CAPTURE_FAIL);
+    expect(turns[0].aiPhase).toBe('error');
+    expect(
+      canSubmitTutorQuestion({ isLoading: false, activePhase: turns[0].aiPhase, question: 'again' })
+    ).toBe(true);
+  });
+
+  it('does not let a late idle sync revive an old failed turn when a newer turn is active', () => {
+    const turns: PipelineTurn[] = [
+      { id: 'old', userText: 'failed', aiPhase: 'error', error: captureMsg },
+      { id: 'new', userText: 'retry', aiPhase: 'thinking' },
+    ];
+    const synced = applySyncActiveTurn(turns, 'new', {
+      error: null,
+      isScanning: false,
+      isLoading: true,
+      isStreaming: true,
+      isResponseReady: false,
+      responseDelivered: false,
+      hasResponse: false,
+    });
+    expect(synced.find((t) => t.id === 'old')?.aiPhase).toBe('error');
+    expect(synced.find((t) => t.id === 'new')?.aiPhase).toBe('thinking');
+  });
+
+  it('nextAiPhase preserves terminal error without hook error', () => {
+    expect(
+      nextAiPhase({
+        error: null,
+        isScanning: false,
+        isResponseReady: false,
+        responseDelivered: false,
+        hasResponse: false,
+        currentPhase: 'error',
+      })
+    ).toBe('error');
   });
 });
 

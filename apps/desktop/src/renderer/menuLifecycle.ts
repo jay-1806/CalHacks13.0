@@ -75,3 +75,23 @@ export function resolveAfterOpen(pending: MenuIntent): {
 export function mayRestoreCompactWindow(phase: MenuPhase): boolean {
   return phase === 'closed';
 }
+
+/** Radial action that owns the buddy window after the menu closes. */
+export type PendingRadialMode = 'canvas' | 'panel' | 'voice' | null;
+
+/**
+ * After a radial item is chosen, compact restore must not run for Canvas,
+ * Text, or Voice. Those modes own the next window size; a late 96×96 restore
+ * leaves Chat clipped or fights Voice listening chrome (Part 6.5.2 / 6.6).
+ */
+export function shouldRestoreCompactAfterMenuExit(mode: PendingRadialMode): boolean {
+  return mode !== 'canvas' && mode !== 'panel' && mode !== 'voice';
+}
+
+/** Map command item ids to the window mode they request. */
+export function pendingModeForCommandItem(id: string): PendingRadialMode {
+  if (id === 'canvas') return 'canvas';
+  if (id === 'text') return 'panel';
+  if (id === 'voice') return 'voice';
+  return null;
+}

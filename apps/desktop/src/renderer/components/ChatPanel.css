@@ -850,25 +850,46 @@
   box-shadow: var(--st-focus-ring-soft);
 }
 
-/* ── Voice recording ────────────────────────────────────────────────────── */
+/* ── Voice recording / live draft (Part 6.6.3) ───────────────────────────── */
 
-.voice-recording-overlay {
+.voice-recording-overlay,
+.voice-live-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 10px 14px;
   background: var(--st-surface);
   border-top: 1px solid var(--st-border);
-  justify-content: center;
+  justify-content: flex-start;
   flex-shrink: 0;
-  min-height: 58px;
+  min-height: 52px;
+  box-sizing: border-box;
 }
 
 .voice-recording-text {
   font-size: 12px;
   color: var(--st-text-secondary);
-  font-weight: 500;
+  font-weight: 560;
   line-height: 1.35;
+}
+
+.voice-live-hint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--st-text-muted);
+}
+
+.voice-draft-bubble {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.voice-draft-bubble.is-placeholder {
+  color: var(--st-text-muted);
+  font-weight: 500;
+  font-style: italic;
+  background: var(--st-surface-secondary);
 }
 
 .waveform-container {
@@ -913,12 +934,14 @@
 
 .aux-panel-host .memory-header-row,
 .aux-panel-host .demo-panel-header,
-.aux-panel-host .sponsor-header {
+.aux-panel-host .sponsor-header,
+.aux-panel-host .core-header {
   border-bottom-color: var(--st-border);
 }
 
 .aux-panel-host .memory-panel h4,
 .aux-panel-host .sponsor-header h4,
+.aux-panel-host .core-header h4,
 .aux-panel-host .demo-title {
   color: var(--st-text);
   background: none;
@@ -933,6 +956,8 @@
 
 .aux-panel-host .preference-section,
 .aux-panel-host .sponsor-card,
+.aux-panel-host .core-service-row,
+.aux-panel-host .tech-detail-row,
 .aux-panel-host .demo-lesson-card {
   background: var(--st-surface-secondary);
   border: 1px solid var(--st-border);
@@ -941,6 +966,7 @@
 
 .aux-panel-host .sponsor-title,
 .aux-panel-host .sponsor-card,
+.aux-panel-host .core-service-label,
 .aux-panel-host .demo-lesson-name,
 .aux-panel-host .demo-lesson-desc,
 .aux-panel-host .demo-content-preview,

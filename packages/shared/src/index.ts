@@ -3,6 +3,7 @@
 
 export * from './brand.js';
 export * from './onboarding.js';
+export * from './desktop-startup.js';
 export * from './permission-policy.js';
 
 // Schemas
@@ -10,9 +11,12 @@ export * from './schemas/drawing.js';
 export * from './schemas/tutor.js';
 export * from './schemas/memory.js';
 export * from './sponsors.js';
+export * from './core-services-dashboard.js';
 export * from './point-parser.js';
 export * from './overlay-refine.js';
 export * from './figure-layout.js';
+export * from './work-board-layout.js';
+export * from './capture-ink-occupancy.js';
 export * from './chess-board.js';
 export * from './draw-shape-sanitize.js';
 export * from './stream-tag-parser.js';
@@ -45,6 +49,9 @@ export * from './annotation-pointer.js';
 
 // End-to-end tutoring pipeline contracts (pure)
 export * from './tutoring-pipeline.js';
+export * from './voice-interaction.js';
+export * from './voice-stt-audio.js';
+export * from './demo-voice.js';
 
 // macOS modifier flags (hold-to-talk)
 export * from './keymap-darwin.js';
