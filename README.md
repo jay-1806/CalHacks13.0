@@ -177,7 +177,7 @@ Latest run: **13/13** subjects, **13/13** guided-or-explained correctly, voice a
 |---|---|
 | `pnpm dev` | Orchestrator + desktop app with hot reload |
 | `pnpm dev:orchestrator` / `pnpm dev:desktop` | Run one side only |
-| `pnpm test` | Unit tests (Vitest, 294 tests) |
+| `pnpm test` | Unit tests (Vitest, 382 tests) |
 | `pnpm typecheck` | Type-check every package |
 | `pnpm build` | Production build |
 | `pnpm dist:win` / `pnpm dist:mac` | Package an installer (unsigned) |
