@@ -226,4 +226,4 @@ More: [docs/privacy-and-safety.md](docs/privacy-and-safety.md).
 
 ## Team
 
-Built at Cal Hacks 13.0 by **Pratham Gala**, **Dev Mulchandani** and **Andre Agle**.
+Built at Cal Hacks 13.0 by **Pratham Gala**, **Manav Patel**, **Dev Mulchandani** and **Jay Vithlani**.
