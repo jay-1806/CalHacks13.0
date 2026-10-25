@@ -1,88 +1,103 @@
-# Quicky.AI
+<p align="center">
+  <img src="apps/desktop/build/icon.png" alt="Quicky.AI logo" width="120" />
+</p>
 
-**Your AI tutor, right on your screen.**
+<h1 align="center">Quicky.AI</h1>
 
-Quicky.AI is a desktop AI math tutor for **Cal Hacks 13.0**. It lives next to your cursor: ask about a problem on your screen (or type it), get a step-by-step explanation, watch compact annotations appear on the page, and hear each step narrated—then ask a follow-up in context.
+<p align="center"><b>A tutor that sits on your screen, points at what matters, draws on it, and talks you through it.</b></p>
 
-Built for **Windows and macOS** · **Electron + React + TypeScript** · Local **Node.js orchestrator** · **Claude** (when configured) · Optional **Cartesia** voice
-
-> **Brand:** The product is **Quicky.AI** (not Quicke.AI). Internal packages, env vars, IPC, and storage may still use the legacy `screentutor` / `@screentutor/*` identifiers for compatibility—that is intentional.
-
-UI handoff for teammates: [docs/QUICKY_UI_HANDOFF.md](docs/QUICKY_UI_HANDOFF.md).
-
----
-
-## What is Quicky.AI?
-
-A student sees:
-
-`3(x + 2) = 21`
-
-They open the floating Liquid Metal launcher, choose **Text** (or Voice / Capture), ask for help, and Quicky.AI can generate a step-by-step explanation with on-screen marks and narration. The algebraic solution is **x = 5**. Follow-ups such as “Why do we multiply 3 by both terms?” keep session context when the orchestrator and memory services are configured.
-
-This describes the **intended product workflow**. Live Claude → overlay → narration still requires a configured `.env` and a deliberate user-initiated test (see [Current verification status](#current-verification-status)).
+<p align="center">
+  Windows · macOS · Electron + React + TypeScript · Claude Opus 5.5 · Cartesia voice · Built at Cal Hacks 13.0
+</p>
 
 ---
 
-## Key features
+## What it does
 
-- **Floating Liquid Metal launcher** — animated metal disc, specular rim, free desktop drag (no forced edge dock).
-- **Four-action radial menu** — Voice, Capture, Text, Canvas in a PLUS layout with edge-aware placement.
-- **Frosted Pearl tutor panel** — preferred **420 × 620**, **24px** outer radius; smart placement near the launcher; free header drag without moving the launcher anchor.
-- **Text questions** — type and submit from the composer.
-- **Voice** — hold-to-talk (and **Cmd/Ctrl+Shift+E**); microphone access is requested only when Voice is used deliberately.
-- **Screen region capture** — select a problem area; capture runs only when you ask (Capture action or question flow).
-- **On-screen annotations** — separate transparent overlay (not only chat bubbles): compact pointers, arrows, working lines synced to narration steps.
-- **Narration** — Cartesia when configured; otherwise system / silent timing fallbacks.
-- **Follow-up tutoring** — session turns retained for contextual next questions when the backend memory path is available.
-- **First-launch onboarding** — “Learn right on your screen.” / “Ask. Watch. Understand.”; reopen via **Help → Getting Started**.
-- **Privacy-conscious permissions** — no automatic mic prompt at startup; Screen Recording only for capture; sensitive windows blocked; screenshots not stored.
+Put anything on your screen — a math problem, a chess position, an app you're stuck in, a page in another language — and ask Quicky.AI about it by voice or text. It looks at your screen and teaches you **right there**:
+
+- 🔵 **Points** at each thing as it talks about it, with a small cursor that never covers what it points at
+- ✍️ **Draws** hand-drawn marks on your screen — loops, arrows, boxes, underlines, keyboard shortcuts, word meanings — and **writes the working** beside the problem in handwriting
+- 🔊 **Speaks** each step, and the pointer and drawings move exactly with the voice
+- 🧭 **Stays with you** when you're *doing* something: for an app task or a chess game it guides one action at a time, watches your screen, checks what you did, and continues
+
+The voice starts about **3 seconds** after you ask, while the rest of the answer is still being written.
+
+### What you can learn
+
+| Subject | Ask something like | What Quicky.AI does |
+|---|---|---|
+| **Math** | "Find x in this triangle." | Marks the sides and angles on your diagram, writes each line of working beside it, checks the answer |
+| **Chess** | "Teach me the trick in this position, then guide me through it move by move." | Reads the board (either orientation), names the pattern, draws move arrows and boxes squares, then waits for each of your moves |
+| **Software** | "How do I crop this photo?" | Points at the exact tool, shows the shortcut as keycaps, waits for your click, then guides the next step |
+| **Languages** | "What does 飲みます mean?" | Writes the meaning and pronunciation under the word and explains the grammar |
+| **Anything else** | "Explain this chart." | Points and marks while it explains |
+
+The subject is detected automatically from your screen and question.
+
+### How much it explains
+
+Answers are **short and clear by default** (usually 4–8 steps). Ask for more and it becomes a patient, in-depth lesson: *"explain in detail"*, *"explain why"*, *"I don't understand"*, *"go slower"*.
+
+---
+
+## Try it
+
+1. Start the app (see [Getting started](#getting-started)).
+2. Put a problem on screen and **hold Ctrl+Shift+E** (Cmd+Shift+E on Mac) while you ask — or click the floating launcher and choose **Text**.
+3. Watch and listen. The chat panel steps aside while it explains and comes back when it's done; the marks fade away a few seconds later.
+
+### Chess demo — Philidor's smothered mate
+
+Open [this position on Lichess](https://lichess.org/editor/4r2k/pp4pp/8/q5N1/2Q5/B7/PP3PPP/6K1_w_-_-_0_1) → **Continue from here** → **Play with the computer** (as White), then ask:
+
+> "Teach me the trick in this position so I can spot it in my own games, then guide me through it move by move."
+
+Quicky.AI names the pattern, gives you a checklist for spotting it, and guides **Nf7+ → Nh6+ → Qg8+!! → Nf7#**, checking each of your moves and explaining Black's forced replies.
+
+### Guided lessons
+
+When a turn ends with something for you to do, a **"Your turn"** hint appears and the marks stay on screen. Then just do it — Quicky.AI notices your screen change and continues. You can also:
+
+- say **"done"** or **"next"** (hold-to-talk), or
+- open the chat panel and press **Next step** / **End lesson**.
 
 ---
 
 ## How it works
 
-```text
-Floating launcher → Text / Voice / Capture
-  → optional screenshot
-  → POST http://localhost:4317/api/tutor/ask (SSE)
-  → Claude explanation (when ANTHROPIC_API_KEY is set)
-  → buddy panel status + separate annotation overlay
-  → narration steps + TTS
-  → follow-up question (same session)
-```
-
-The desktop app does **not** run the model locally; the orchestrator calls external AI services when configured.
-
 ```mermaid
 graph LR
-    You((You)) -->|launcher / hotkey| Desktop["Desktop app<br/>Electron · Win + macOS"]
-    Desktop -->|screenshot + question| Orch["Orchestrator<br/>Fastify :4317"]
-    Orch --> Claude["Claude"]
-    Orch --> Convex[(Convex)]
-    Orch --> Moss[Moss]
-    Orch --> Elastic[Elastic]
-    Desktop <-->|voice| Cartesia[Cartesia]
-    Orch -->|answer + drawing steps| Desktop
-    Desktop -->|draws| Overlay["Screen overlay"]
+    You((You)) -->|voice / text / capture| App["Desktop app<br/>Electron"]
+    App -->|screenshot + question| Orch["Orchestrator<br/>Fastify :4317"]
+    Orch -->|picks a lesson pack,<br/>streams steps| Claude["Claude Opus 5.5"]
+    Orch -.-> Convex[("Convex<br/>learner memory")]
+    Orch -.-> Moss["Moss<br/>answer cache"]
+    Orch -.-> Elastic["Elastic<br/>traces"]
+    Orch -->|each step as soon as it's written| App
+    App <-->|speech in / out| Cartesia["Cartesia<br/>Sonic + Ink"]
+    App -->|pointer + marks| Overlay["Transparent overlay<br/>on your screen"]
 ```
 
-Full architecture: [docs/architecture.md](docs/architecture.md).
+1. **Ask.** The app takes a fresh screenshot of your screen (or the area you selected) and sends it with your question.
+2. **Teach.** Claude follows the lesson pack for the subject (math, software, chess, language, general) and writes the answer as **steps**. Each step has what to say and what to draw — pointer positions and marks like `[DRAW:arrow:…]`, `[DRAW:work:…]`, `[DRAW:key:…:Ctrl+J]`, `[DRAW:gloss:…:word|meaning]`, or chess squares by name (`[DRAW:move:g1-f3]`) that the server turns into exact board positions.
+3. **Stream.** Each finished step goes to the app immediately, so narration starts on step 1.
+4. **Narrate.** Each step is spoken with Cartesia, and **the voice is the clock**: the pointer and marks for a step appear the moment that step's audio starts, so they never drift apart.
+5. **Guide.** If the step asks you to do something, the app keeps the marks up, watches the screen for your change, and sends a new screenshot with the lesson so far. Claude checks what you did and continues.
 
----
+More detail: [docs/architecture.md](docs/architecture.md).
 
-## Architecture (summary)
+### Built with
 
-| Layer | Role |
+| Technology | Role |
 |---|---|
-| `apps/desktop` | Electron buddy window (launcher + panel) + separate annotation overlay |
-| `services/orchestrator` | Fastify API on port **4317**: tutor SSE, memory, TTS session, sponsors |
-| `packages/shared` | Schemas, brand/onboarding helpers, placement, pointers, redaction |
-| Providers | Anthropic Claude; optional Cartesia, Convex, Moss, Elastic |
+| **Anthropic Claude Opus 5.5** | Reads the screen and writes the lesson (structured output, prompt caching, fast mode) |
+| **Cartesia** | Sonic text-to-speech for the narration, Ink speech-to-text for voice questions |
+| **Convex** | Learner memory and session history *(optional)* |
+| **Moss** | Semantic cache for reworded questions about the same screen *(optional)* |
+| **Elastic** | OpenTelemetry traces *(optional)* |
 
-**Internal names preserved:** `@screentutor/desktop`, `@screentutor/orchestrator`, `@screentutor/shared`, `ai.screentutor.desktop`, many `screentutor_*` storage keys and `SCREENTUTOR_*` env vars.
-
-Verified from package metadata: **Node.js ≥ 20.19.0**, **pnpm ≥ 9.0.0** (Node 22+ recommended).
+Details: [docs/sponsor-integrations.md](docs/sponsor-integrations.md).
 
 ---
 
@@ -90,11 +105,11 @@ Verified from package metadata: **Node.js ≥ 20.19.0**, **pnpm ≥ 9.0.0** (Nod
 
 ### Requirements
 
-- Node.js **≥ 20.19.0** (22+ recommended)
-- **pnpm** ≥ 9 (`npm install -g pnpm` or use `npx pnpm@11.15.0 …`)
-- An **Anthropic API key** for live tutoring (required for Claude). Other services are optional and fall back locally.
+- **Node.js** 20.19 or newer (22+ recommended)
+- **pnpm** 9 or newer
+- An **Anthropic API key** (required) and a **Cartesia API key** with credits (for voice)
 
-### 1. Install
+### Install
 
 ```bash
 git clone https://github.com/pgala3183/CalHacks13.0.git
@@ -103,192 +118,93 @@ pnpm install
 cp .env.example .env
 ```
 
-Put keys in the **repository root** `.env` (the orchestrator loads `../../../.env` from `services/orchestrator/src/config.ts`).
-
-> **Windows PowerShell:** use `npx.cmd` / `pnpm.cmd` if scripts are disabled; prefer `;` over `&&`.
-
-### 2. Start learner memory (Convex, optional)
+Add your keys to the `.env` in the **repository root**:
 
 ```bash
-cd services/orchestrator
-npx convex dev
+ANTHROPIC_API_KEY=...
+CARTESIA_API_KEY=...
+CARTESIA_VOICE_ID=...
 ```
 
-Copy the deployment URL into `CONVEX_URL` in `.env`. Set `SCREENTUTOR_CONVEX_SECRET` in `.env` and on Convex:
-
-```bash
-npx convex env set SCREENTUTOR_CONVEX_SECRET <same value>
-```
-
-### 3. Run the app
-
-From the repo root:
+### Run
 
 ```bash
 pnpm dev
 ```
 
-Starts the orchestrator on **4317** and the Electron desktop app.
+This starts the orchestrator on port **4317** and the desktop app. Check the server with `curl http://localhost:4317/health`.
 
-Or separately:
+> **Windows (PowerShell):** use `pnpm.cmd` if script execution is disabled. If you see `Error: Electron uninstall`, run Electron's installer once:
+> `node node_modules/.pnpm/electron@42.4.1_supports-color@8.1.1/node_modules/electron/install.js`
 
-```bash
-pnpm dev:orchestrator
-pnpm dev:desktop
-```
+> **macOS:** grant **Screen Recording** (and Microphone, for voice) to Electron in System Settings → Privacy & Security, then relaunch.
 
-Health check (no paid model call):
+### Configuration
 
-```bash
-curl http://localhost:4317/health
-curl http://localhost:4317/api/sponsors/status
-```
-
-Configured services should report `real` when keys are present.
-
----
-
-## Environment configuration
-
-Copy [.env.example](.env.example) → **root** `.env`. Variable **names** only (never commit secrets):
-
-| Variable | Required | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | **Yes** (for live Claude) | Screenshot + question → explanation |
-| `CLAUDE_MODEL` / `CLAUDE_EFFORT` / `CLAUDE_SPEED` | | Defaults include `claude-opus-5-5`, effort `low`, speed `fast` |
-| `CARTESIA_API_KEY`, `CARTESIA_VOICE_ID` | Optional | Streaming TTS/STT (else system / mock fallbacks) |
-| `CONVEX_URL`, `SCREENTUTOR_CONVEX_SECRET` | Optional | Persistent learner memory |
-| `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | Optional | Semantic answer cache |
-| `ELASTIC_OTLP_ENDPOINT`, `ELASTIC_API_KEY` | Optional | OTLP traces |
-| `ORCHESTRATOR_PORT` | Optional | Default `4317` |
+| `ANTHROPIC_API_KEY` | — | **Required.** Claude |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | Model for teaching |
+| `CLAUDE_SPEED` | `fast` | Opus fast mode; `standard` is cheaper |
+| `CLAUDE_EFFORT` | `low` | Reasoning effort |
+| `CARTESIA_API_KEY`, `CARTESIA_VOICE_ID` | — | Voice; without them the system voice is used |
+| `CARTESIA_TTS_MODEL` / `CARTESIA_STT_MODEL` | `sonic-3.6` / `ink-2` | Voice models |
+| `CONVEX_URL`, `SCREENTUTOR_CONVEX_SECRET` | — | Persistent learner memory (otherwise in-memory) |
+| `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | — | Semantic answer cache |
+| `ELASTIC_OTLP_ENDPOINT`, `ELASTIC_API_KEY` | — | Traces |
+| `ORCHESTRATOR_PORT` | `4317` | API port |
 
-Restart `pnpm dev` after changing `.env`.
-
-### Speed (measured previously on a geometry screenshot)
-
-| Setup | Time to full answer |
-|---|---|
-| Opus 5.5, standard | ~16.7 s |
-| **Opus 5.5, fast mode (default)** | **~6.7 s** |
-| Sonnet 5.5, `CLAUDE_THINKING=off` | ~8.6 s |
-| Haiku 5.5, `CLAUDE_THINKING=off` | ~4.5 s |
+Restart `pnpm dev` after editing `.env`.
 
 ---
 
-## macOS permissions
+## Accuracy tests
 
-- **Screen Recording** — needed for Capture and screenshot-backed questions. In **System Settings → Privacy & Security → Screen Recording**, enable **Electron** (and/or Terminal) during `pnpm dev`. The Dock may show “Electron”, not “Quicky.AI”. Quit and relaunch after granting.
-- **Microphone** — requested only when you deliberately use **Voice** / hold-to-talk—not at app startup or onboarding.
-- Startup logs a **non-prompting** status line: `[Permissions] screen=… microphone=…`.
-- Do **not** reset the macOS TCC database for normal development.
+Quicky.AI has an accuracy test set: **13 generated screenshots** where the correct targets are known exactly — math diagrams, a photo editor, chess positions (both orientations, guided turns, the smothered-mate demo) and Spanish and Japanese text. Each case is a real Claude call scored on whether it picked the right subject, pointed at the right places, kept voice and drawings aligned, and knew when to guide versus explain.
 
----
+```bash
+pnpm --filter @screentutor/orchestrator eval            # all cases
+pnpm --filter @screentutor/orchestrator eval -- chess   # only matching cases
+```
 
-## First-time use
-
-On first launch (when `quicky_onboarding_v1` is unset), Quicky.AI expands the buddy panel to the welcome guide:
-
-- **Learn right on your screen.**
-- **Ask. Watch. Understand.**
-- Steps: open the floating menu → choose Text, Voice, or Capture → follow the on-screen explanation.
-
-**Get started** opens the real Text composer and focuses the input. **Not now** dismisses and restores the launcher. Reopen anytime via **Help → Getting Started**.
-
-Dev-only reset (localhost): `window.__quickyResetOnboarding()` clears **only** onboarding keys (preserves mute and other prefs).
+Latest run: **13/13** subjects, **13/13** guided-or-explained correctly, voice and drawings aligned in every case, 95% of targets hit. See [services/orchestrator/evals](services/orchestrator/evals/README.md).
 
 ---
 
-## Development commands
+## Development
 
 | Command | What it does |
 |---|---|
-| `pnpm dev` | Orchestrator + desktop (hot reload) |
-| `pnpm dev:orchestrator` | Fastify tutor API only (`tsx watch`) |
-| `pnpm dev:desktop` | Electron app only |
-| `pnpm test` | Orchestrator Vitest suite |
-| `pnpm typecheck` | Type-check all packages |
-| `pnpm build` | Production build of shared, orchestrator, desktop |
-| `pnpm dist:mac` / `pnpm dist:win` | Packaged `.dmg` / NSIS (unsigned unless you sign) |
+| `pnpm dev` | Orchestrator + desktop app with hot reload |
+| `pnpm dev:orchestrator` / `pnpm dev:desktop` | Run one side only |
+| `pnpm test` | Unit tests (Vitest, 294 tests) |
+| `pnpm typecheck` | Type-check every package |
+| `pnpm build` | Production build |
+| `pnpm dist:win` / `pnpm dist:mac` | Package an installer (unsigned) |
 
-CI runs typecheck, tests, and build on Windows and macOS ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
-
-Team plan: [docs/fix-plan.md](docs/fix-plan.md).
-
----
-
-## Project structure
+CI runs typecheck, tests and build on Windows and macOS ([ci.yml](.github/workflows/ci.yml)).
 
 ```
-apps/desktop/                 Electron buddy + overlay
-  build/                      Packaged icons (.icns / .ico / icon.png)
-  src/main/                   Main process, capture, permissions, menu
-  src/preload/                Typed IPC bridge
-  src/renderer/               React UI (launcher, panel, onboarding, overlay)
-services/orchestrator/        Fastify :4317 — Claude, memory, TTS session
-  convex/                     Learner memory schema
-  src/__tests__/              Vitest suite
-packages/shared/              Schemas, brand, onboarding, placement, pointers
-docs/                         Architecture, privacy, sponsors, UI handoff
-Quicky Logo.png               Official orbit logo master (2048×2048 RGBA)
+apps/desktop/            Electron app: launcher, chat panel, overlay, screen capture and watching
+  src/main/              Windows, capture, screen watcher, permissions, hotkeys
+  src/renderer/          React UI, voice (Cartesia), hand-drawn overlay renderer
+services/orchestrator/   Fastify API on :4317
+  src/prompts/           Core teaching prompt + subject lesson packs
+  src/providers/         Claude call, streamed steps
+  evals/                 Accuracy test set (fixtures, runner, scoring)
+packages/shared/         Schemas, tag parser, chess board mapping, narration sync
+docs/                    Architecture, privacy, sponsor notes
 ```
 
----
-
-## Demo walkthrough (user-initiated)
-
-1. Ensure `.env` has `ANTHROPIC_API_KEY` and `pnpm dev` (or both services) is running.
-2. Grant Screen Recording to Electron if using Capture / screenshot-backed asks; relaunch.
-3. Open Text → ask: `Solve 3(x + 2) = 21 step by step.`
-4. Confirm explanation, overlay marks, and narration (Cartesia or system TTS).
-5. Follow-up: `Why do we multiply 3 by both terms?`
-6. Confirm Send is not stuck and overlays clear appropriately.
-
-You must deliberately submit questions; do not expect automatic paid API calls on launch.
-
----
-
-## Current verification status
-
-| Area | Status |
-|---|---|
-| UI (launcher, menu, panel, onboarding, branding) | **Approved** for handoff |
-| Automated tests / typecheck / build | **268/268** tests (35 files), typecheck + build passed on handoff |
-| Local orchestrator `GET /health` | Verified when the service is started |
-| Live Claude → annotations → Cartesia narration | **Not verified** without keys + deliberate ask |
-| Packaged / notarized macOS installer | **Not verified** |
-
----
-
-## Known limitations
-
-- Live tutoring needs a root `.env` with `ANTHROPIC_API_KEY`.
-- Cartesia is optional; without it, TTS falls back.
-- Screen Recording must be granted for capture-based demos in development.
-- Internal package name remains `@screentutor/*`; Git branch may still say `quicke`.
-- Glyph-perfect collision avoidance for every math mark is not guaranteed—pointers are compact and geometry-aware, not a full layout solver.
-
----
-
-## Sponsor technology
-
-| Sponsor | Used for |
-|---|---|
-| **Anthropic** | Claude reads the screenshot and writes explanation / drawing steps |
-| **Cartesia** | Streaming Sonic TTS and Ink STT (optional) |
-| **Convex** | Learner profiles, session history, cache (optional) |
-| **Moss** | Semantic cache for reworded questions (optional) |
-| **Elastic** | OpenTelemetry traces (optional) |
-
-Details: [docs/sponsor-integrations.md](docs/sponsor-integrations.md).
+Internal package names still use the original `@screentutor/*` prefix; that is intentional.
 
 ---
 
 ## Privacy
 
-- Capture only on request—no background screen polling.
-- Sensitive windows are blocked (denylist + privacy mode).
-- Redaction for keys, passwords, emails, cards in logs/traces.
-- Screenshots are not stored (in-memory processing; hash only in history when applicable).
+- The screen is captured only when you ask a question — or, during a guided lesson you started, watched with small low-resolution captures to notice your next action.
+- Sensitive windows (password managers, banking, and others on the denylist) are never captured, and privacy mode blocks analysis entirely.
+- Screenshots are not stored; secrets, emails and card numbers are redacted from logs and traces.
 
 More: [docs/privacy-and-safety.md](docs/privacy-and-safety.md).
 
@@ -296,40 +212,18 @@ More: [docs/privacy-and-safety.md](docs/privacy-and-safety.md).
 
 ## Troubleshooting
 
-**`ANTHROPIC_API_KEY is missing` / warm-up failed**
-
-Create root `.env` from `.env.example` and set the key; restart the orchestrator.
-
-**`Failed to reach Convex, falling back to InMemoryService`**
-
-Optional; app continues with in-process memory. Fix `CONVEX_URL` / secret if you want persistence.
-
-**`Error: Electron uninstall`**
-
-Re-run Electron’s install script under `node_modules/.pnpm/electron@*/node_modules/electron/install.js`, then `pnpm dev`.
-
-**Hotkey not working**
-
-macOS: try `SCREENTUTOR_HOTKEY_MODE=toggle` in `.env`. Windows: run elevated if a fullscreen app steals the hotkey.
-
-**Screen capture black / empty (macOS)**
-
-Grant Screen Recording to Electron, then fully quit and relaunch.
-
-**`listen EADDRINUSE :::4317`**
-
-Another process owns the port; stop it or set `ORCHESTRATOR_PORT`.
-
----
-
-## Team collaboration
-
-- Feature branch for this UI handoff: **`feature/quicke-ui-floating-launcher`**
-- Detailed merge notes: [docs/QUICKY_UI_HANDOFF.md](docs/QUICKY_UI_HANDOFF.md)
-- Compare against main: https://github.com/pgala3183/CalHacks13.0/compare/main...feature/quicke-ui-floating-launcher
+| Problem | Fix |
+|---|---|
+| The explanation stops partway, or there is no voice | Your Cartesia credits may be used up (Cartesia returns `402 quota_exceeded`). Top up or use another `CARTESIA_API_KEY`, then restart |
+| `ANTHROPIC_API_KEY is missing` | Create the root `.env` from `.env.example` and add the key |
+| `Error: Electron uninstall` | Run Electron's `install.js` (see [Run](#run)) |
+| `listen EADDRINUSE :4317` | The app is already running somewhere; stop it or set `ORCHESTRATOR_PORT` |
+| Hold-to-talk hotkey doesn't work on macOS | Set `SCREENTUTOR_HOTKEY_MODE=toggle` in `.env` |
+| Black or empty screenshots on macOS | Grant Screen Recording to Electron, then quit and relaunch |
+| A guided lesson doesn't notice your move | Say "done" (hold-to-talk) or press **Next step** in the chat panel |
 
 ---
 
 ## Team
 
-Built at Cal Hacks 13.0 by Pratham Gala, Dev Mulchandani and Andre Agle.
+Built at Cal Hacks 13.0 by **Pratham Gala**, **Dev Mulchandani** and **Andre Agle**.
