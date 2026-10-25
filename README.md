@@ -17,7 +17,7 @@
 Put anything on your screen — a math problem, a chess position, an app you're stuck in, a page in another language — and ask Quicky.AI about it by voice or text. It looks at your screen and teaches you **right there**:
 
 - 🔵 **Points** at each thing as it talks about it, with a small cursor that never covers what it points at
-- ✍️ **Draws** hand-drawn marks on your screen — loops, arrows, boxes, underlines, keyboard shortcuts, word meanings — and **writes the working** beside the problem in handwriting
+- ✍️ **Draws** hand-drawn marks on your screen — loops, arrows, boxes, underlines, keyboard shortcuts, word meanings — and **writes the working** beside the problem in handwriting. The working boards are laid out automatically in blank space (found by sampling the screenshot), so they never cover the diagram or each other
 - 🔊 **Speaks** each step, and the pointer and drawings move exactly with the voice
 - 🧭 **Stays with you** when you're *doing* something: for an app task or a chess game it guides one action at a time, watches your screen, checks what you did, and continues
 
@@ -44,8 +44,24 @@ Answers are **short and clear by default** (usually 4–8 steps). Ask for more a
 ## Try it
 
 1. Start the app (see [Getting started](#getting-started)).
-2. Put a problem on screen and **hold Ctrl+Shift+E** (Cmd+Shift+E on Mac) while you ask — or click the floating launcher and choose **Text**.
-3. Watch and listen. The chat panel steps aside while it explains and comes back when it's done; the marks fade away a few seconds later.
+2. Put a problem on screen and ask — by voice, by typing, or by capturing just the area you care about (see the shortcuts below), or from the floating launcher's menu (**Voice · Capture · Text · Canvas**).
+3. Watch and listen. The chat panel steps aside while it explains and comes back when it's done; the marks fade away a few seconds later. Press **Esc** to stop at any time.
+
+### Keyboard shortcuts
+
+| Shortcut (Cmd on Mac) | Action |
+|---|---|
+| **Ctrl+Alt+1** | Voice — ask out loud |
+| **Ctrl+Alt+2** | Capture — select the area of the screen to ask about |
+| **Ctrl+Alt+3** | Text — type a question |
+| **Hold Ctrl+Shift+E** | Hold to talk, release to ask |
+| **Esc** (or **Ctrl+Alt+0**) | Stop listening or teaching |
+
+### Voice input
+
+While you speak, your words appear live in the chat; Quicky.AI sends the question by itself after a short pause, and teaching starts as soon as the first step is ready. Speech recognition uses Cartesia Ink, and falls back to the system's speech recognition if Cartesia isn't available (for example, when its credits run out).
+
+> **Demo Voice mode is currently ON.** For the hackathon demo, Voice skips the microphone: it shows "Listening…" for 3 seconds and then asks *"Explain me the problem on the screen."* Everything after that is real — the screenshot, Claude, the voice and the drawings — so it teaches whatever is actually on your screen. To use your own spoken questions, set `DEMO_VOICE_MODE = false` in [`packages/shared/src/demo-voice.ts`](packages/shared/src/demo-voice.ts).
 
 ### Chess demo — Philidor's smothered mate
 
@@ -96,6 +112,8 @@ More detail: [docs/architecture.md](docs/architecture.md).
 | **Convex** | Learner memory and session history *(optional)* |
 | **Moss** | Semantic cache for reworded questions about the same screen *(optional)* |
 | **Elastic** | OpenTelemetry traces *(optional)* |
+
+The **Core Services** panel (the status button in the chat panel's toolbar) shows which of these are connected right now — it only reports a service as live when its connection is actually verified.
 
 Details: [docs/sponsor-integrations.md](docs/sponsor-integrations.md).
 
@@ -214,6 +232,7 @@ More: [docs/privacy-and-safety.md](docs/privacy-and-safety.md).
 
 | Problem | Fix |
 |---|---|
+| Voice always asks "Explain me the problem on the screen." | Demo Voice mode is on — set `DEMO_VOICE_MODE = false` in `packages/shared/src/demo-voice.ts` |
 | The explanation stops partway, or there is no voice | Your Cartesia credits may be used up (Cartesia returns `402 quota_exceeded`). Top up or use another `CARTESIA_API_KEY`, then restart |
 | `ANTHROPIC_API_KEY is missing` | Create the root `.env` from `.env.example` and add the key |
 | `Error: Electron uninstall` | Run Electron's `install.js` (see [Run](#run)) |
