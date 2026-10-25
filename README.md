@@ -65,7 +65,7 @@ While you speak, your words appear live in the chat; Quicky.AI sends the questio
 
 ### Chess demo — Philidor's smothered mate
 
-Open [this position on Lichess](https://lichess.org/editor/4r2k/pp4pp/8/q5N1/2Q5/B7/PP3PPP/6K1_w_-_-_0_1) → **Continue from here** → **Play with the computer** (as White), then ask:
+Open [this position on Lichess](https://lichess.org/editor/4r2k/pp4pp/8/q5N1/2Q5/B7/PP3PPP/6K1_w_-_-_0_1) → **Continue from here** → **Play with the computer** (as White), then ask (type it with **Text** while Demo Voice mode is on):
 
 > "Teach me the trick in this position so I can spot it in my own games, then guide me through it move by move."
 
@@ -75,7 +75,7 @@ Quicky.AI names the pattern, gives you a checklist for spotting it, and guides *
 
 When a turn ends with something for you to do, a **"Your turn"** hint appears and the marks stay on screen. Then just do it — Quicky.AI notices your screen change and continues. You can also:
 
-- say **"done"** or **"next"** (hold-to-talk), or
+- say **"done"** or **"next"** (hold-to-talk; not while Demo Voice mode is on), or
 - open the chat panel and press **Next step** / **End lesson**.
 
 ---
